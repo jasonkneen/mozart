@@ -1,100 +1,65 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import ChatInterface from './components/ChatInterface';
 import VersionControl from './components/VersionControl';
 import SettingsModal from './components/SettingsModal';
-import { Workspace, Message, ThinkingLevel, Tab } from './types';
-import { gemini } from './services/geminiService';
+import { Message, ThinkingLevel } from './types';
 import { Cpu } from 'lucide-react';
+import { useConductorStore } from './services/store';
+import { agentService } from './services/agentService';
+import { gitService } from './services/gitService';
 
 const App: React.FC = () => {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([
-    {
-      id: 'ws-5',
-      name: 'Fix sidepanel issues',
-      branch: 'fix-sidepanel-chat-issues',
-      location: 'memphis',
-      timeAgo: '3mo ago',
-      status: 'idle',
-      fleetType: 'Nanobrowser',
-      repo: 'conductor',
-      diffs: { added: 4, removed: 4 }
-    },
-    {
-      id: 'ws-1',
-      name: 'Floating Chat UI',
-      branch: 'fix/floating-chat-ui-improvements',
-      location: 'san-jose',
-      timeAgo: 'Ready to merge',
-      status: 'Ready to merge',
-      fleetType: 'Nanobrowser',
-      repo: 'conductor',
-      diffs: { added: 312, removed: 332 },
-      unread: true
-    },
-    {
-      id: 'ws-2',
-      name: 'Bilbao workspace',
-      branch: 'jasonkneen/bilbao',
-      location: 'bilbao',
-      timeAgo: 'Initializing...',
-      status: 'Initializing...',
-      fleetType: 'Nanobrowser',
-      repo: 'conductor',
-      diffs: { added: 0, removed: 0 }
-    },
-    {
-      id: 'ws-canvas-1',
-      name: 'Bandung Component',
-      branch: 'jasonkneen-bandung',
-      location: 'bandung',
-      timeAgo: '3mo ago',
-      status: 'idle',
-      fleetType: 'Canvas',
-      repo: 'conductor',
-      diffs: { added: 12, removed: 0 }
-    }
-  ]);
-
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>('ws-5');
-  const [tabs, setTabs] = useState<Tab[]>([
-    { id: 't1', title: 'Claude', type: 'chat', active: true },
-  ]);
-  const [activeTabId, setActiveTabId] = useState('t1');
+  const { state, actions } = useConductorStore();
+  const {
+    workspaces,
+    activeWorkspaceId,
+    tabs,
+    activeTabId,
+    messages,
+    diffsByWorkspace,
+    fileTreeByWorkspace,
+    diffsLoadingByWorkspace
+  } = state;
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-
-  const [messages, setMessages] = useState<Record<string, Message[]>>({
-    'ws-5': [
-      {
-        id: 'msg-1',
-        role: 'assistant',
-        content: "I've successfully fixed all the side panel issues mentioned. The changes ensure a cleaner user experience with no leftover messages and a properly sized input field that grows with content.",
-        timestamp: Date.now() - 3600000,
-        traces: [
-          { type: 'Thinking', content: 'Inspecting side-panel package structure...' },
-          { type: 'Lint', command: 'cd pages/side-panel && npx eslint src/SidePanel.tsx', status: 'completed' },
-          { type: 'Edit', content: 'components/ChatInput.tsx', diff: { added: 12, removed: 4 }, status: 'completed' },
-          { type: 'Thinking', content: 'Summary: Fixed auto-resize logic and input reset.' }
-        ],
-        plan: {
-          title: "Fix side panel issues",
-          description: "Cleaning up UI issues in the chat component",
-          steps: [
-            { label: "Branch renamed", details: "Changed from conductor/memphis to fix-sidepanel-chat-issues", completed: true },
-            { label: "Fixed leftover chat messages", details: "Added state clearing logic when panel gains focus", completed: true },
-            { label: "Chat responsiveness", details: "Optimized Planner agent's web_task handling", completed: true },
-            { label: "Fixed input sizing", details: "Improved auto-resize with 200px max height", completed: true }
-          ]
-        }
-      }
-    ]
-  });
-  const [isLoading, setIsLoading] = useState(false);
 
   const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
   const activeMessages = activeWorkspaceId ? messages[activeWorkspaceId] || [] : [];
+  const activeDiffs = activeWorkspaceId ? diffsByWorkspace[activeWorkspaceId] || [] : [];
+  const activeFileTree = activeWorkspaceId ? fileTreeByWorkspace[activeWorkspaceId] || [] : [];
+  const isDiffsLoading = activeWorkspaceId ? diffsLoadingByWorkspace[activeWorkspaceId] || false : false;
+
+  useEffect(() => {
+    if (!activeWorkspaceId) return;
+    let cancelled = false;
+
+    const loadWorkspaceData = async () => {
+      actions.setWorkspaceDiffsLoading(activeWorkspaceId, true);
+      try {
+        const [diffs, fileTree] = await Promise.all([
+          gitService.getWorkspaceDiffs(activeWorkspaceId),
+          gitService.getWorkspaceFileTree(activeWorkspaceId)
+        ]);
+        if (cancelled) return;
+        actions.setWorkspaceDiffs(activeWorkspaceId, diffs);
+        actions.setWorkspaceFileTree(activeWorkspaceId, fileTree);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        if (!cancelled) {
+          actions.setWorkspaceDiffsLoading(activeWorkspaceId, false);
+        }
+      }
+    };
+
+    loadWorkspaceData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspaceId, actions]);
 
   const handleSendMessage = async (content: string, level: ThinkingLevel) => {
     if (!activeWorkspaceId) return;
@@ -107,20 +72,21 @@ const App: React.FC = () => {
       level
     };
 
-    setMessages(prev => ({
-      ...prev,
-      [activeWorkspaceId]: [...(prev[activeWorkspaceId] || []), userMessage]
-    }));
+    actions.addMessage(activeWorkspaceId, userMessage);
 
-    setIsLoading(true);
-    
     try {
       const history = (messages[activeWorkspaceId] || []).map(m => ({ 
         role: m.role, 
         content: m.content 
       }));
 
-      const response = await gemini.generateResponse(content, level, history);
+      const response = await agentService.generateResponse({
+        prompt: content,
+        level,
+        history,
+        provider: 'codex',
+        model: 'gpt-5-codex'
+      });
 
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -133,33 +99,36 @@ const App: React.FC = () => {
         ]
       };
 
-      setMessages(prev => ({
-        ...prev,
-        [activeWorkspaceId]: [...(prev[activeWorkspaceId] || []), aiMessage]
-      }));
+      actions.addMessage(activeWorkspaceId, aiMessage);
     } catch (error) {
       console.error(error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  const handleAddWorkspace = () => {
-    const id = `ws-${Date.now()}`;
-    const newWs: Workspace = {
-      id,
-      name: 'New Agent Task',
-      branch: `ai/task-${Math.floor(Math.random() * 1000)}`,
-      location: 'local-env',
-      timeAgo: 'just now',
-      status: 'idle',
-      fleetType: 'Nanobrowser',
-      repo: 'conductor',
-      diffs: { added: 0, removed: 0 }
+  const handleAddWorkspace = (options?: { repoPath?: string; repoUrl?: string; name?: string; branch?: string; baseBranch?: string }) => {
+    const create = async () => {
+      try {
+        const newWorkspace = await gitService.createWorkspace({
+          repoPath: options?.repoPath,
+          repoUrl: options?.repoUrl,
+          name: options?.name,
+          branch: options?.branch,
+          baseBranch: options?.baseBranch
+        });
+        actions.addWorkspace(newWorkspace);
+        actions.setWorkspaceDiffsLoading(newWorkspace.id, true);
+        const [diffs, fileTree] = await Promise.all([
+          gitService.getWorkspaceDiffs(newWorkspace.id),
+          gitService.getWorkspaceFileTree(newWorkspace.id)
+        ]);
+        actions.setWorkspaceDiffs(newWorkspace.id, diffs);
+        actions.setWorkspaceFileTree(newWorkspace.id, fileTree);
+        actions.setWorkspaceDiffsLoading(newWorkspace.id, false);
+      } catch (error) {
+        console.error(error);
+      }
     };
-    setWorkspaces(prev => [...prev, newWs]);
-    setMessages(prev => ({ ...prev, [id]: [] }));
-    setActiveWorkspaceId(id);
+    create();
   };
 
   return (
@@ -167,7 +136,7 @@ const App: React.FC = () => {
       <Sidebar 
         workspaces={workspaces} 
         activeWorkspaceId={activeWorkspaceId}
-        onSelectWorkspace={setActiveWorkspaceId}
+        onSelectWorkspace={actions.setActiveWorkspace}
         onAddWorkspace={handleAddWorkspace}
         onSettingsClick={() => setIsSettingsOpen(true)}
       />
@@ -177,18 +146,22 @@ const App: React.FC = () => {
           <div className="flex-1 flex flex-col min-w-0 border-r border-white/5 shadow-2xl z-10">
             <TopBar 
               branch={activeWorkspace?.branch || ''} 
+              baseBranch={activeWorkspace?.baseBranch}
               tabs={tabs} 
               activeTabId={activeTabId} 
-              onTabSelect={setActiveTabId}
+              onTabSelect={actions.setActiveTab}
               location={activeWorkspace?.location || ''}
             />
-            <ChatInterface 
-              messages={activeMessages} 
+            <ChatInterface
+              messages={activeMessages}
               onSendMessage={handleSendMessage}
-              isLoading={isLoading}
             />
           </div>
-          <VersionControl />
+          <VersionControl
+            diffs={activeDiffs}
+            fileTree={activeFileTree}
+            isLoading={isDiffsLoading}
+          />
         </main>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center text-white/10 gap-6">

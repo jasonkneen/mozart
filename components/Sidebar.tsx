@@ -7,12 +7,13 @@ import {
   MessageSquare, Search, MoreHorizontal, X, FolderOpen, 
   Link, Zap, Info
 } from 'lucide-react';
+import RepoModal, { RepoModalMode, RepoModalPayload } from './RepoModal';
 
 interface SidebarProps {
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   onSelectWorkspace: (id: string) => void;
-  onAddWorkspace: () => void;
+  onAddWorkspace: (options?: { repoPath?: string; repoUrl?: string; name?: string; branch?: string; baseBranch?: string }) => void;
   onSettingsClick: () => void;
 }
 
@@ -25,6 +26,25 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isRepoModalOpen, setIsRepoModalOpen] = useState(false);
+  const [repoModalMode, setRepoModalMode] = useState<RepoModalMode>('local');
+
+  const handleOpenRepoModal = (mode: RepoModalMode) => {
+    setRepoModalMode(mode);
+    setIsRepoModalOpen(true);
+    setIsAddMenuOpen(false);
+  };
+
+  const handleCreateRepoWorkspace = (payload: RepoModalPayload) => {
+    onAddWorkspace({
+      repoPath: payload.mode === 'local' ? payload.repoPath : undefined,
+      repoUrl: payload.mode === 'url' ? payload.repoUrl : undefined,
+      name: payload.workspaceName,
+      branch: payload.branch,
+      baseBranch: payload.baseBranch
+    });
+    setIsRepoModalOpen(false);
+  };
 
   return (
     <div className="w-[280px] h-full bg-[#0D0D0D] flex flex-col border-r border-white/5 shrink-0 text-[#E5E5E5] z-20 relative">
@@ -142,15 +162,24 @@ const Sidebar: React.FC<SidebarProps> = ({
             <span className="text-sm font-medium">Add repository</span>
           </button>
           
-          {isAddMenuOpen && (
+              {isAddMenuOpen && (
             <div className="absolute bottom-full left-0 mb-2 w-full bg-[#1A1A1A] border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2">
-              <button className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors">
+              <button
+                onClick={() => handleOpenRepoModal('local')}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+              >
                 <FolderOpen size={14} /> Open project
               </button>
-              <button className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors border-t border-white/5">
+              <button
+                onClick={() => handleOpenRepoModal('url')}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors border-t border-white/5"
+              >
                 <Link size={14} /> Clone from URL
               </button>
-              <button className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors border-t border-white/5">
+              <button
+                onClick={() => onAddWorkspace()}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors border-t border-white/5"
+              >
                 <Zap size={14} /> Quick start
               </button>
             </div>
@@ -166,6 +195,13 @@ const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
       </div>
+
+      <RepoModal
+        isOpen={isRepoModalOpen}
+        mode={repoModalMode}
+        onClose={() => setIsRepoModalOpen(false)}
+        onCreate={handleCreateRepoWorkspace}
+      />
     </div>
   );
 };

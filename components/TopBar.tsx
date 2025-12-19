@@ -5,13 +5,14 @@ import { Tab } from '../types';
 
 interface TopBarProps {
   branch: string;
+  baseBranch?: string;
   tabs: Tab[];
   activeTabId: string;
   onTabSelect: (id: string) => void;
   location: string;
 }
 
-const TopBar: React.FC<TopBarProps> = ({ branch, tabs, activeTabId, onTabSelect, location }) => {
+const TopBar: React.FC<TopBarProps> = ({ branch, baseBranch, tabs, activeTabId, onTabSelect, location }) => {
   return (
     <div className="h-24 flex flex-col border-b border-white/5 bg-[#0A0A0A]">
       <div className="h-10 px-4 flex items-center justify-between border-b border-white/5">
@@ -24,6 +25,12 @@ const TopBar: React.FC<TopBarProps> = ({ branch, tabs, activeTabId, onTabSelect,
               <Copy size={12} className="text-white/40 hover:text-white" />
             </div>
           </div>
+          {baseBranch && (
+            <div className="flex items-center gap-2 px-2 py-1 border border-white/10 rounded text-[11px] text-white/50 bg-white/[0.03]">
+              <span className="uppercase tracking-widest text-[9px] text-white/30">base</span>
+              <span className="font-mono text-white/70">{baseBranch}</span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 px-2 py-1 bg-white/5 border border-white/10 rounded text-[11px] text-white/60">

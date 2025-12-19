@@ -1,7 +1,6 @@
 
 import React, { useState } from 'react';
-import { MOCK_FILE_TREE } from '../constants';
-import { FileNode } from '../types';
+import { FileDiff, FileNode } from '../types';
 import { 
   Folder, FileCode, GitBranch, ChevronRight, ChevronDown, 
   CheckCircle2, Search, Filter, Plus, Play, Square, ExternalLink
@@ -35,7 +34,13 @@ const FileItem: React.FC<{ node: FileNode, depth: number }> = ({ node, depth }) 
   );
 };
 
-const VersionControl: React.FC = () => {
+interface VersionControlProps {
+  diffs: FileDiff[];
+  fileTree: FileNode[];
+  isLoading: boolean;
+}
+
+const VersionControl: React.FC<VersionControlProps> = ({ diffs, fileTree, isLoading }) => {
   const [activeTab, setActiveTab] = useState<'changes' | 'files' | 'review'>('changes');
 
   return (
@@ -71,7 +76,7 @@ const VersionControl: React.FC = () => {
               activeTab === 'changes' ? 'bg-white/10 text-white shadow-lg' : 'text-white/40 hover:text-white/60'
             }`}
           >
-            Changes <span className="opacity-40 ml-1">10</span>
+            Changes <span className="opacity-40 ml-1">{diffs.length}</span>
           </button>
           <button
             onClick={() => setActiveTab('files')}
@@ -99,14 +104,14 @@ const VersionControl: React.FC = () => {
         <div className="flex-1 overflow-y-auto px-2 py-1 scrollbar-hide">
           {activeTab === 'changes' && (
             <div className="space-y-0.5">
-              {[
-                { path: 'src/App.tsx', added: 2, removed: 5 },
-                { path: 'src/core/conductor/WorkspaceAPI.ts', added: 53, removed: 1 },
-                { path: 'src/ui/components/FileBadge.tsx', added: 2, removed: 3 },
-                { path: 'src/ui/components/RepositoryDetailsDialog.tsx', added: 225, removed: 117 },
-                { path: 'src/ui/hooks/useWorkspaceContext.ts', added: 8, removed: 0 },
-              ].map((change, i) => (
-                <div key={i} className="flex items-center justify-between px-2 py-1.5 hover:bg-white/5 rounded-md cursor-pointer group">
+              {isLoading && (
+                <div className="px-3 py-6 text-xs text-white/40">Loading changes...</div>
+              )}
+              {!isLoading && diffs.length === 0 && (
+                <div className="px-3 py-6 text-xs text-white/40">No changes detected.</div>
+              )}
+              {!isLoading && diffs.map((change) => (
+                <div key={change.path} className="flex items-center justify-between px-2 py-1.5 hover:bg-white/5 rounded-md cursor-pointer group">
                   <span className="text-[12px] font-mono text-white/60 group-hover:text-white truncate pr-4">
                     {change.path}
                   </span>
@@ -123,7 +128,13 @@ const VersionControl: React.FC = () => {
           )}
           {activeTab === 'files' && (
             <div className="space-y-0.5">
-              {MOCK_FILE_TREE.map(node => (
+              {isLoading && (
+                <div className="px-3 py-6 text-xs text-white/40">Loading file tree...</div>
+              )}
+              {!isLoading && fileTree.length === 0 && (
+                <div className="px-3 py-6 text-xs text-white/40">No files found.</div>
+              )}
+              {!isLoading && fileTree.map(node => (
                 <FileItem key={node.path} node={node} depth={0} />
               ))}
             </div>

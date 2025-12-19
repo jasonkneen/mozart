@@ -11,7 +11,6 @@ import {
 interface ChatInterfaceProps {
   messages: Message[];
   onSendMessage: (content: string, level: ThinkingLevel) => void;
-  isLoading: boolean;
 }
 
 const ModelSelector: React.FC = () => {
@@ -67,7 +66,7 @@ const ModelSelector: React.FC = () => {
   );
 };
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMessage, isLoading }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMessage }) => {
   const [input, setInput] = useState('');
   const [level, setLevel] = useState<ThinkingLevel>(ThinkingLevel.None);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
@@ -188,14 +187,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMessage, 
             )}
           </div>
         ))}
-        {isLoading && (
-          <div className="flex items-center gap-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
-             <div className="w-8 h-8 rounded-full border border-white/5 bg-white/5 flex items-center justify-center shrink-0">
-                <div className="w-4 h-4 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
-             </div>
-             <span className="text-xs font-bold text-white/20 uppercase tracking-widest">Conductor is executing...</span>
-          </div>
-        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -244,7 +235,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMessage, 
                 </button>
                 <button 
                   type="submit"
-                  disabled={!input.trim() || isLoading}
+                  disabled={!input.trim()}
                   className="p-2.5 bg-white/10 hover:bg-white/20 disabled:opacity-20 text-white rounded-xl transition-all shadow-xl active:scale-90"
                 >
                   <Send size={18} />
