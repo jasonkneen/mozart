@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Conductor AI Orchestrator** (ai-Mozart) is a React-based web UI for orchestrating AI coding agents in isolated git worktrees. It provides a workspace management interface where each workspace maps to a git branch/worktree, enabling parallel AI-assisted development.
+**Mozart AI Orchestrator** (ai-Mozart) is a React-based web UI for orchestrating AI coding agents in isolated git worktrees. It provides a workspace management interface where each workspace maps to a git branch/worktree, enabling parallel AI-assisted development.
 
 ## Development Commands
 
@@ -12,11 +12,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install dependencies
 npm install
 
-# Run the frontend dev server (port 3000)
-npm run dev
-
-# Run the backend git service (port 4545) - required for real git operations
-npm run dev:server
+# Run both frontend and backend together (two terminals required)
+npm run dev          # Frontend (Vite dev server, port 3000)
+npm run dev:server   # Backend server (ports 4545 + 54545)
 
 # Build for production
 npm run build
@@ -24,6 +22,22 @@ npm run build
 # Preview production build
 npm run preview
 ```
+
+## Authentication
+
+Mozart uses **OAuth with Claude/Anthropic** for authentication. No API keys required.
+
+### How it works:
+1. Start the backend server (`npm run dev:server`)
+2. Open the frontend (`npm run dev`)
+3. Click "Login to Claude" button in the top-right corner
+4. Authorize the app in the popup window
+5. You'll be redirected back and can start chatting
+
+### OAuth Flow Details:
+- **OAuth Callback Port**: 54545 (separate from API server)
+- **Token Storage**: `~/.mozart/oauth-config.json` (encrypted)
+- **Token Refresh**: Automatic when token expires
 
 ## Architecture
 
@@ -37,56 +51,65 @@ npm run preview
 ├── constants.tsx        # System instructions and fleet categories
 ├── components/          # React components (Sidebar, ChatInterface, VersionControl, etc.)
 └── services/
-    ├── store.tsx        # Zustand-style React context store with localStorage persistence
-    ├── agentService.ts  # Agent abstraction layer (supports Gemini or mock responses)
-    ├── geminiService.ts # Google Gemini API integration
-    ├── gitService.ts    # Git operations client (calls backend API or returns mock data)
-    └── mockData.ts      # Mock diffs and file trees for development
+    ├── store.tsx        # React context store with localStorage persistence
+    ├── agentService.ts  # Chat API client (calls backend /api/chat)
+    ├── oauthService.ts  # OAuth flow management (login, logout, status)
+    └── gitService.ts    # Git operations client (calls backend API)
 ```
 
 ### Backend (Node.js HTTP server)
 
 ```
 server/
-└── index.js             # Git worktree management service
-                         # Creates workspaces, fetches diffs, manages file trees
-                         # Uses native git commands via child_process
+├── index.js             # Main server with API routes and OAuth callback handler
+│                        # Port 4545: API endpoints
+│                        # Port 54545: OAuth callback receiver
+└── oauth.js             # OAuth handlers (PKCE flow, token management)
 ```
 
 ### Key Data Flow
 
 1. **Store** (`services/store.tsx`): Manages all UI state - workspaces, messages, diffs, tabs. Persists to localStorage.
-2. **Agent Service**: Routes prompts to either Gemini (if `VITE_USE_GEMINI` env var set) or returns mock responses.
-3. **Git Service**: Calls backend API at `/api/*` for real git operations. Falls back to mock data if server unavailable.
-4. **Backend**: Creates git worktrees, parses `git status`/`git diff`, builds file trees.
+2. **OAuth Service**: Manages Claude authentication via OAuth PKCE flow.
+3. **Agent Service**: Sends chat requests to `/api/chat` which uses OAuth token for Claude API.
+4. **Git Service**: Calls backend API at `/api/*` for git operations.
+5. **Backend**: Creates git worktrees, handles OAuth, proxies Claude API requests.
 
 ## Environment Variables
 
-Create `.env.local` with:
+Optional configuration (via env or defaults):
 
-```bash
-GEMINI_API_KEY=your-key      # Required for Gemini AI responses
-VITE_USE_GEMINI=true         # Enable Gemini (otherwise mock responses)
-VITE_DEFAULT_REPO_PATH=/path # Default repo for workspace creation
-VITE_CONDUCTOR_API_BASE=/api # API base URL (default: /api)
-```
-
-Backend server config (via env or defaults):
-- `CONDUCTOR_SERVER_PORT` - Server port (default: 4545)
+### Backend server config:
+- `CONDUCTOR_SERVER_PORT` - API server port (default: 4545)
 - `CONDUCTOR_WORKSPACES_ROOT` - Worktree storage (default: ~/conductor/workspaces)
 - `CONDUCTOR_REPOS_ROOT` - Cloned repos (default: ~/conductor/repos)
+
+### Frontend config (in `.env.local`):
+- `VITE_DEFAULT_REPO_PATH` - Default repo for workspace creation
+- `VITE_CONDUCTOR_API_BASE` - API base URL (default: /api)
 
 ## Key Types
 
 Located in `types.ts`:
 - `Workspace` - Git workspace with branch, status, diffs metadata
 - `Message` - Chat message with optional tool traces and plans
-- `ThinkingLevel` - None | Think | Megathink (maps to Gemini thinking budget)
+- `ThinkingLevel` - None | Think | Megathink (maps to token budget)
 - `FileDiff`, `FileNode` - Git diff and file tree structures
 
-## Frontend/Backend Communication
+## API Endpoints
 
 The Vite dev server proxies `/api/*` to `http://localhost:4545`. Main endpoints:
+
+### OAuth
+- `GET /api/oauth/status` - Get authentication status
+- `POST /api/oauth/start` - Start OAuth login flow
+- `GET /api/oauth/token` - Get current access token
+- `POST /api/oauth/logout` - Clear stored tokens
+
+### Chat
+- `POST /api/chat` - Send message to Claude (requires auth)
+
+### Workspaces
 - `POST /api/workspaces` - Create new workspace (git worktree)
 - `GET /api/workspaces/:id/diffs` - Get file diffs
 - `GET /api/workspaces/:id/files` - Get file tree

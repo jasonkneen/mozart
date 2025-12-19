@@ -10,10 +10,22 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.56",
+    "@ai-sdk/react": "^2.0.117",
+    "@anthropic-ai/sdk": "^0.71.2",
+    "@openauthjs/openauth": "^0.4.3",
+    "ai": "^5.0.115",
+    "ai-sdk-provider-claude-code": "^2.2.4",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.23.26",
+    "highlight.js": "^11.11.1",
     "lucide-react": "^0.562.0",
+    "prismjs": "^1.30.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "@google/genai": "^1.34.0"
+    "react-markdown": "^10.1.0",
+    "react-syntax-highlighter": "^16.1.0",
+    "recharts": "^3.6.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

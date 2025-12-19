@@ -40,7 +40,7 @@ type StoreAction =
   | { type: 'set-workspace-file-tree'; workspaceId: string; fileTree: FileNode[] }
   | { type: 'set-workspace-diffs-loading'; workspaceId: string; isLoading: boolean };
 
-const STORAGE_KEY = 'conductor.store.v1';
+const STORAGE_KEY = 'conductor.store.v2';
 
 const createInitialState = (): StoreState => {
   return {

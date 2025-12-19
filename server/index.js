@@ -6,15 +6,59 @@ import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
+// Use Claude Code provider which spawns Claude CLI with its own auth
+import { claudeCode } from 'ai-sdk-provider-claude-code';
+import { streamText } from 'ai';
+
+import {
+  startLogin,
+  completeLogin,
+  getAccessToken,
+  getStatus,
+  logout
+} from './oauth.js';
+
 const execFileAsync = promisify(execFile);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.CONDUCTOR_SERVER_PORT || 4545);
+const OAUTH_CALLBACK_PORT = 54545;
 const WORKSPACES_ROOT = process.env.CONDUCTOR_WORKSPACES_ROOT || path.join(os.homedir(), 'conductor', 'workspaces');
 const REPOS_ROOT = process.env.CONDUCTOR_REPOS_ROOT || path.join(os.homedir(), 'conductor', 'repos');
 const STATE_PATH = process.env.CONDUCTOR_STATE_PATH || path.join(__dirname, 'state.json');
+
+// Persistent storage for pending OAuth flows
+const PENDING_FLOWS_PATH = path.join(os.tmpdir(), 'mozart-oauth-flows.json');
+
+const loadPendingFlows = async () => {
+  try {
+    const raw = await readFile(PENDING_FLOWS_PATH, 'utf8');
+    return new Map(Object.entries(JSON.parse(raw)));
+  } catch {
+    return new Map();
+  }
+};
+
+const savePendingFlows = async (flows) => {
+  await writeFile(PENDING_FLOWS_PATH, JSON.stringify(Object.fromEntries(flows)));
+};
+
+let pendingOAuthFlows = new Map();
+
+// Load flows on startup
+loadPendingFlows().then(flows => {
+  pendingOAuthFlows = flows;
+  // Clean up old flows (older than 10 minutes)
+  const now = Date.now();
+  for (const [state, flow] of pendingOAuthFlows) {
+    if (now - flow.createdAt > 10 * 60 * 1000) {
+      pendingOAuthFlows.delete(state);
+    }
+  }
+  savePendingFlows(pendingOAuthFlows);
+});
 
 const readJsonBody = async (req) => {
   const chunks = [];
@@ -54,7 +98,7 @@ const git = async (args, cwd) => {
   return stdout.trim();
 };
 
-const slugify = (value) => value.toLowerCase().replace(/[^a-z0-9\-]+/g, '-').replace(/^-+|-+$/g, '');
+const slugify = (value) => value.toLowerCase().replace(/[^a-z0-9\\-]+/g, '-').replace(/^-+|-+$/g, '');
 
 const resolveRepoRoot = async (repoPath) => {
   return git(['rev-parse', '--show-toplevel'], repoPath);
@@ -264,6 +308,143 @@ const handleRequest = async (req, res) => {
     return sendJson(res, 200, { ok: true });
   }
 
+  // ==========================================
+  // OAuth Endpoints
+  // ==========================================
+
+  if (parsed.pathname === '/api/oauth/status' && method === 'GET') {
+    try {
+      const result = await getStatus();
+      if (!result.success) {
+        return sendError(res, 500, result.error);
+      }
+      return sendJson(res, 200, { success: true, data: result.data });
+    } catch (error) {
+      return sendError(res, 500, error.message || 'Failed to get status');
+    }
+  }
+
+  if (parsed.pathname === '/api/oauth/start' && method === 'POST') {
+    try {
+      const result = await startLogin();
+      if (!result.success) {
+        return sendError(res, 400, result.error);
+      }
+      // Store the pending flow for callback (persist to disk)
+      pendingOAuthFlows.set(result.data.state, {
+        verifier: result.data.verifier,
+        state: result.data.state,
+        createdAt: Date.now()
+      });
+      await savePendingFlows(pendingOAuthFlows);
+      return sendJson(res, 200, { success: true, data: result.data });
+    } catch (error) {
+      return sendError(res, 500, error.message || 'Failed to start login');
+    }
+  }
+
+  if (parsed.pathname === '/api/oauth/complete' && method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      if (!body?.code || !body?.verifier || !body?.state || !body?.stateParam) {
+        return sendError(res, 400, 'Code, verifier, state, and stateParam are required');
+      }
+      const result = await completeLogin(body.code, body.verifier, body.state);
+      if (!result.success) {
+        return sendError(res, 400, result.error);
+      }
+      return sendJson(res, 200, { success: true, data: result.data });
+    } catch (error) {
+      return sendError(res, 500, error.message || 'Failed to complete login');
+    }
+  }
+
+  if (parsed.pathname === '/api/oauth/token' && method === 'GET') {
+    try {
+      const result = await getAccessToken();
+      if (!result.success) {
+        return sendError(res, 401, result.error);
+      }
+      return sendJson(res, 200, { success: true, data: result.data });
+    } catch (error) {
+      return sendError(res, 500, error.message || 'Failed to get token');
+    }
+  }
+
+  if (parsed.pathname === '/api/oauth/logout' && method === 'POST') {
+    try {
+      const result = await logout();
+      if (!result.success) {
+        return sendError(res, 500, result.error);
+      }
+      return sendJson(res, 200, { success: true, data: { message: result.data } });
+    } catch (error) {
+      return sendError(res, 500, error.message || 'Failed to logout');
+    }
+  }
+
+  // ==========================================
+  // Chat Endpoint (uses OAuth token)
+  // ==========================================
+
+  if (parsed.pathname === '/api/chat' && method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      if (!body?.messages) {
+        return sendError(res, 400, 'messages is required');
+      }
+
+      // Map thinking level to max_tokens
+      let maxTokens = 4096;
+      if (body.level === 'Think') maxTokens = 8192;
+      if (body.level === 'Megathink') maxTokens = 16384;
+
+      // Select model - claudeCode uses its own model naming
+      let modelId = 'sonnet';
+      if (body.model?.includes('haiku')) modelId = 'haiku';
+      if (body.model?.includes('opus')) modelId = 'opus';
+
+      // Use Claude Code provider with streaming - returns AI SDK compatible stream
+      const result = streamText({
+        model: claudeCode(modelId),
+        maxTokens,
+        system: `You are Conductor, an elite local-first AI coding orchestrator.
+You manage isolated git worktrees.
+Always wrap tool calls in trace blocks.
+Available Trace Types: Thinking, Lint, Edit, Bash, Read, Plan.
+Format your response with a clear 'Summary' header.
+Use Markdown for rich text.
+When proposing a plan, use the 'Plan' trace type to describe steps.`,
+        messages: body.messages,
+      });
+
+      // Return text stream response (claudeCode provider doesn't support toDataStreamResponse)
+      const response = result.toTextStreamResponse();
+
+      // Copy headers from AI SDK response
+      res.writeHead(response.status, Object.fromEntries(response.headers.entries()));
+
+      // Pipe the body
+      const reader = response.body?.getReader();
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+      }
+      res.end();
+      return; // Important: return after streaming
+    } catch (error) {
+      console.error('Chat error:', error);
+      return sendError(res, 500, error.message || 'Failed to generate response');
+    }
+  }
+
+  // ==========================================
+  // Workspace Endpoints
+  // ==========================================
+
   if (parsed.pathname === '/api/workspaces' && method === 'POST') {
     try {
       const body = await readJsonBody(req);
@@ -324,9 +505,255 @@ const handleRequest = async (req, res) => {
   return sendError(res, 404, 'Not found');
 };
 
+// ==========================================
+// OAuth Callback Server (separate port)
+// ==========================================
+
+const handleOAuthCallback = async (req, res) => {
+  const { url, method } = req;
+  if (!url) {
+    res.writeHead(404);
+    res.end('Not found');
+    return;
+  }
+
+  const parsed = new URL(url, `http://localhost:${OAUTH_CALLBACK_PORT}`);
+
+  // Root page - show manual code entry form
+  if (parsed.pathname === '/' || parsed.pathname === '') {
+    // Check if there's an active pending flow
+    const flows = Array.from(pendingOAuthFlows.entries());
+    const activeFlow = flows.length > 0 ? flows[flows.length - 1] : null;
+
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(`
+      <html>
+        <head>
+          <title>Mozart OAuth</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              height: 100vh;
+              margin: 0;
+              background: #0a0a0f;
+              color: white;
+            }
+            .container {
+              text-align: center;
+              padding: 40px;
+              max-width: 500px;
+            }
+            h1 { color: #60a5fa; margin-bottom: 10px; font-size: 24px; }
+            p { color: #888; margin-bottom: 20px; font-size: 14px; }
+            .form-group { margin-bottom: 15px; text-align: left; }
+            label { display: block; color: #aaa; font-size: 12px; margin-bottom: 5px; }
+            input {
+              width: 100%;
+              padding: 12px;
+              border: 1px solid #333;
+              border-radius: 8px;
+              background: #1a1a2e;
+              color: white;
+              font-size: 14px;
+              box-sizing: border-box;
+            }
+            input:focus { outline: none; border-color: #60a5fa; }
+            button {
+              width: 100%;
+              padding: 12px;
+              border: none;
+              border-radius: 8px;
+              background: #3b82f6;
+              color: white;
+              font-size: 14px;
+              font-weight: 600;
+              cursor: pointer;
+              margin-top: 10px;
+            }
+            button:hover { background: #2563eb; }
+            .status {
+              margin-top: 20px;
+              padding: 15px;
+              border-radius: 8px;
+              background: ${activeFlow ? '#1a2e1a' : '#2e1a1a'};
+              border: 1px solid ${activeFlow ? '#22c55e33' : '#ef444433'};
+            }
+            .status-text { color: ${activeFlow ? '#22c55e' : '#ef4444'}; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>🎵 Mozart OAuth</h1>
+            <p>Enter your authorization code manually if the redirect didn't work.</p>
+
+            <form action="/submit-code" method="GET">
+              <div class="form-group">
+                <label>Authorization Code</label>
+                <input type="text" name="code" placeholder="Paste your authorization code here" required />
+              </div>
+              <div class="form-group">
+                <label>State (from URL)</label>
+                <input type="text" name="state" placeholder="State parameter" value="${activeFlow ? activeFlow[0] : ''}" ${activeFlow ? 'readonly' : ''} required />
+              </div>
+              <button type="submit">Complete Login</button>
+            </form>
+
+            <div class="status">
+              <div class="status-text">
+                ${activeFlow
+                  ? '✓ Active OAuth flow detected. Enter the code from the redirect URL.'
+                  : '✗ No active OAuth flow. Start login from the app first.'}
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+    return;
+  }
+
+  // Handle manual code submission
+  if (parsed.pathname === '/submit-code') {
+    const code = parsed.searchParams.get('code');
+    const state = parsed.searchParams.get('state');
+
+    if (!code || !state) {
+      res.writeHead(400, { 'Content-Type': 'text/html' });
+      res.end('<html><body style="background:#0a0a0f;color:white;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;"><div><h1 style="color:#ef4444;">Error</h1><p>Missing code or state</p><a href="/" style="color:#60a5fa;">Try again</a></div></body></html>');
+      return;
+    }
+
+    const pendingFlow = pendingOAuthFlows.get(state);
+    if (!pendingFlow) {
+      res.writeHead(400, { 'Content-Type': 'text/html' });
+      res.end('<html><body style="background:#0a0a0f;color:white;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;"><div><h1 style="color:#ef4444;">Error</h1><p>Unknown or expired OAuth flow. Start login again from the app.</p><a href="/" style="color:#60a5fa;">Back</a></div></body></html>');
+      return;
+    }
+
+    try {
+      const result = await completeLogin(code, pendingFlow.verifier, pendingFlow.state);
+      pendingOAuthFlows.delete(state);
+
+      if (!result.success) {
+        res.writeHead(400, { 'Content-Type': 'text/html' });
+        res.end(`<html><body style="background:#0a0a0f;color:white;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;"><div><h1 style="color:#ef4444;">Error</h1><p>${result.error}</p><a href="/" style="color:#60a5fa;">Try again</a></div></body></html>`);
+        return;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(`
+        <html>
+          <head>
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+                background: #0a0a0f;
+                color: white;
+              }
+              .container { text-align: center; padding: 40px; }
+              h1 { color: #22c55e; margin-bottom: 20px; }
+              p { color: #888; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>✓ Authentication Successful</h1>
+              <p>You can close this window and return to Mozart.</p>
+            </div>
+          </body>
+        </html>
+      `);
+    } catch (error) {
+      pendingOAuthFlows.delete(state);
+      res.writeHead(500, { 'Content-Type': 'text/html' });
+      res.end(`<html><body style="background:#0a0a0f;color:white;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;"><div><h1 style="color:#ef4444;">Error</h1><p>${error.message}</p><a href="/" style="color:#60a5fa;">Try again</a></div></body></html>`);
+    }
+    return;
+  }
+
+  if (parsed.pathname === '/callback') {
+    const code = parsed.searchParams.get('code');
+    const state = parsed.searchParams.get('state');
+
+    if (!code || !state) {
+      res.writeHead(400, { 'Content-Type': 'text/html' });
+      res.end('<html><body><h1>Error</h1><p>Missing code or state parameter</p></body></html>');
+      return;
+    }
+
+    const pendingFlow = pendingOAuthFlows.get(state);
+    if (!pendingFlow) {
+      res.writeHead(400, { 'Content-Type': 'text/html' });
+      res.end('<html><body><h1>Error</h1><p>Unknown OAuth flow</p></body></html>');
+      return;
+    }
+
+    try {
+      const result = await completeLogin(code, pendingFlow.verifier, pendingFlow.state);
+      pendingOAuthFlows.delete(state);
+
+      if (!result.success) {
+        res.writeHead(400, { 'Content-Type': 'text/html' });
+        res.end(`<html><body><h1>Error</h1><p>${result.error}</p></body></html>`);
+        return;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(`
+        <html>
+          <head>
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+                background: #1a1a2e;
+                color: white;
+              }
+              .container {
+                text-align: center;
+                padding: 40px;
+              }
+              h1 { color: #00ff88; margin-bottom: 20px; }
+              p { color: #888; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>✓ Authentication Successful</h1>
+              <p>You can close this window and return to Mozart.</p>
+            </div>
+          </body>
+        </html>
+      `);
+    } catch (error) {
+      pendingOAuthFlows.delete(state);
+      res.writeHead(500, { 'Content-Type': 'text/html' });
+      res.end(`<html><body><h1>Error</h1><p>${error.message}</p></body></html>`);
+    }
+    return;
+  }
+
+  res.writeHead(404);
+  res.end('Not found');
+};
+
 const start = async () => {
   await ensureWorkspacesRoot();
   await ensureStatePath();
+
+  // Main API server
   const server = http.createServer((req, res) => {
     handleRequest(req, res).catch((error) => {
       console.error(error);
@@ -334,8 +761,21 @@ const start = async () => {
     });
   });
 
+  // OAuth callback server (different port for redirect URI)
+  const callbackServer = http.createServer((req, res) => {
+    handleOAuthCallback(req, res).catch((error) => {
+      console.error('OAuth callback error:', error);
+      res.writeHead(500);
+      res.end('Internal server error');
+    });
+  });
+
   server.listen(PORT, () => {
-    console.log(`Conductor git service running on http://localhost:${PORT}`);
+    console.log(`Mozart API server running on http://localhost:${PORT}`);
+  });
+
+  callbackServer.listen(OAUTH_CALLBACK_PORT, () => {
+    console.log(`OAuth callback server running on http://localhost:${OAUTH_CALLBACK_PORT}`);
   });
 };
 

@@ -1,0 +1,67 @@
+{
+  "workspaces": {
+    "ws-1766135849181": {
+      "id": "ws-1766135849181",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766135849181-455",
+      "repoPath": "/Users/jkneen/conductor/repos/kiro-720",
+      "branch": "ai-task-1766135849181",
+      "name": "ai-task-1766135849181",
+      "createdAt": 1766135849234,
+      "baseBranch": "main"
+    },
+    "ws-1766137273576": {
+      "id": "ws-1766137273576",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766137273576-98",
+      "repoPath": "/Users/jkneen/Documents/GitHub/ai-Mozart",
+      "branch": "ai-task-1766137273576",
+      "name": "ai-task-1766137273576",
+      "createdAt": 1766137273628,
+      "baseBranch": "main"
+    },
+    "ws-1766150177735": {
+      "id": "ws-1766150177735",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766150177735-19",
+      "repoPath": "/Users/jkneen/Documents/GitHub/ai-winamp",
+      "branch": "ai-task-1766150177735",
+      "name": "ai-task-1766150177735",
+      "createdAt": 1766150177785,
+      "baseBranch": "main"
+    },
+    "ws-1766150199120": {
+      "id": "ws-1766150199120",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766150199120-327",
+      "repoPath": "/Users/jkneen/Documents/GitHub/ai-winamp",
+      "branch": "ai-task-1766150199120",
+      "name": "ai-task-1766150199120",
+      "createdAt": 1766150199157,
+      "baseBranch": "main"
+    },
+    "ws-1766150264416": {
+      "id": "ws-1766150264416",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766150264416-67",
+      "repoPath": "/Users/jkneen/Documents/GitHub/ai-Mozart",
+      "branch": "ai-task-1766150264416",
+      "name": "ai-task-1766150264416",
+      "createdAt": 1766150264458,
+      "baseBranch": "main"
+    },
+    "ws-1766151204278": {
+      "id": "ws-1766151204278",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766151204278-884",
+      "repoPath": "/Users/jkneen/Documents/GitHub/ai-Mozart",
+      "branch": "ai-task-1766151204278",
+      "name": "ai-task-1766151204278",
+      "createdAt": 1766151204328,
+      "baseBranch": "main"
+    },
+    "ws-1766151491369": {
+      "id": "ws-1766151491369",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766151491369-190",
+      "repoPath": "/Users/jkneen/Documents/GitHub/mcpsx.run/cli",
+      "branch": "ai-task-1766151491369",
+      "name": "ai-task-1766151491369",
+      "createdAt": 1766151491653,
+      "baseBranch": "main"
+    }
+  }
+}
