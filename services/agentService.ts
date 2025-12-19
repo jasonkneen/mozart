@@ -17,14 +17,8 @@ type AgentResponse = {
   model: string;
 };
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const DEFAULT_PROVIDER: AgentProvider = 'codex';
-const DEFAULT_MODEL = 'gpt-5-codex';
-
-const useGeminiProvider = () => {
-  return Boolean((import.meta as { env?: Record<string, string> }).env?.VITE_USE_GEMINI);
-};
+const DEFAULT_PROVIDER: AgentProvider = 'claude';
+const DEFAULT_MODEL = 'gemini-3-pro-preview';
 
 export const agentService = {
   async generateResponse(request: AgentRequest): Promise<AgentResponse> {
@@ -32,19 +26,7 @@ export const agentService = {
     const model = request.model || DEFAULT_MODEL;
     const history = request.history || [];
 
-    if (useGeminiProvider()) {
-      const response = await gemini.generateResponse(request.prompt, request.level, history);
-      return { text: response.text, provider, model };
-    }
-
-    await sleep(350);
-
-    return {
-      text:
-        `Mock ${provider} response (${model}). Connect a real provider to enable live results.\n\n` +
-        `Prompt: ${request.prompt}`,
-      provider,
-      model
-    };
+    const response = await gemini.generateResponse(request.prompt, request.level, history);
+    return { text: response.text, provider, model };
   }
 };

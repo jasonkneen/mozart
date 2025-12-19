@@ -6,7 +6,7 @@ import ChatInterface from './components/ChatInterface';
 import VersionControl from './components/VersionControl';
 import SettingsModal from './components/SettingsModal';
 import { Message, ThinkingLevel } from './types';
-import { Cpu } from 'lucide-react';
+import { Cpu, AlertCircle, X } from 'lucide-react';
 import { useConductorStore } from './services/store';
 import { agentService } from './services/agentService';
 import { gitService } from './services/gitService';
@@ -24,6 +24,7 @@ const App: React.FC = () => {
     diffsLoadingByWorkspace
   } = state;
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
   const activeMessages = activeWorkspaceId ? messages[activeWorkspaceId] || [] : [];
@@ -45,8 +46,9 @@ const App: React.FC = () => {
         if (cancelled) return;
         actions.setWorkspaceDiffs(activeWorkspaceId, diffs);
         actions.setWorkspaceFileTree(activeWorkspaceId, fileTree);
-      } catch (error) {
-        console.error(error);
+      } catch (err) {
+        console.error(err);
+        setError(err instanceof Error ? err.message : 'Failed to load workspace data');
       } finally {
         if (!cancelled) {
           actions.setWorkspaceDiffsLoading(activeWorkspaceId, false);
@@ -100,8 +102,15 @@ const App: React.FC = () => {
       };
 
       actions.addMessage(activeWorkspaceId, aiMessage);
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(err);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: `Error: ${err instanceof Error ? err.message : 'Failed to generate response. Check that GEMINI_API_KEY is set.'}`,
+        timestamp: Date.now()
+      };
+      actions.addMessage(activeWorkspaceId, errorMessage);
     }
   };
 
@@ -124,8 +133,9 @@ const App: React.FC = () => {
         actions.setWorkspaceDiffs(newWorkspace.id, diffs);
         actions.setWorkspaceFileTree(newWorkspace.id, fileTree);
         actions.setWorkspaceDiffsLoading(newWorkspace.id, false);
-      } catch (error) {
-        console.error(error);
+      } catch (err) {
+        console.error(err);
+        setError(err instanceof Error ? err.message : 'Failed to create workspace. Make sure the backend is running (npm run dev:server).');
       }
     };
     create();
@@ -182,6 +192,24 @@ const App: React.FC = () => {
       )}
 
       {isSettingsOpen && <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />}
+
+      {error && (
+        <div className="fixed bottom-6 right-6 max-w-md bg-red-500/10 border border-red-500/30 rounded-xl p-4 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-2">
+          <div className="flex items-start gap-3">
+            <AlertCircle size={20} className="text-red-400 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-red-200 font-medium">Error</p>
+              <p className="text-xs text-red-300/80 mt-1">{error}</p>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              className="p-1 hover:bg-white/10 rounded transition-colors"
+            >
+              <X size={16} className="text-red-300" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

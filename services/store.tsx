@@ -43,106 +43,12 @@ type StoreAction =
 const STORAGE_KEY = 'conductor.store.v1';
 
 const createInitialState = (): StoreState => {
-  const now = Date.now();
-
-  const workspaces: Workspace[] = [
-    {
-      id: 'ws-5',
-      name: 'Fix sidepanel issues',
-      branch: 'fix-sidepanel-chat-issues',
-      location: 'memphis',
-      timeAgo: '3mo ago',
-      status: 'idle',
-      fleetType: 'Nanobrowser',
-      repo: 'conductor',
-      diffs: { added: 4, removed: 4 }
-    },
-    {
-      id: 'ws-1',
-      name: 'Floating Chat UI',
-      branch: 'fix/floating-chat-ui-improvements',
-      location: 'san-jose',
-      timeAgo: 'Ready to merge',
-      status: 'Ready to merge',
-      fleetType: 'Nanobrowser',
-      repo: 'conductor',
-      diffs: { added: 312, removed: 332 },
-      unread: true
-    },
-    {
-      id: 'ws-2',
-      name: 'Bilbao workspace',
-      branch: 'jasonkneen/bilbao',
-      location: 'bilbao',
-      timeAgo: 'Initializing...',
-      status: 'Initializing...',
-      fleetType: 'Nanobrowser',
-      repo: 'conductor',
-      diffs: { added: 0, removed: 0 }
-    },
-    {
-      id: 'ws-canvas-1',
-      name: 'Bandung Component',
-      branch: 'jasonkneen-bandung',
-      location: 'bandung',
-      timeAgo: '3mo ago',
-      status: 'idle',
-      fleetType: 'Canvas',
-      repo: 'conductor',
-      diffs: { added: 12, removed: 0 }
-    }
-  ];
-
-  const messages: Record<string, Message[]> = {
-    'ws-5': [
-      {
-        id: 'msg-1',
-        role: 'assistant',
-        content:
-          "I've successfully fixed all the side panel issues mentioned. The changes ensure a cleaner user experience with no leftover messages and a properly sized input field that grows with content.",
-        timestamp: now - 3600000,
-        traces: [
-          { type: 'Thinking', content: 'Inspecting side-panel package structure...' },
-          { type: 'Lint', command: 'cd pages/side-panel && npx eslint src/SidePanel.tsx', status: 'completed', content: '' },
-          { type: 'Edit', content: 'components/ChatInput.tsx', diff: { added: 12, removed: 4 }, status: 'completed' },
-          { type: 'Thinking', content: 'Summary: Fixed auto-resize logic and input reset.' }
-        ],
-        plan: {
-          title: 'Fix side panel issues',
-          description: 'Cleaning up UI issues in the chat component',
-          steps: [
-            {
-              label: 'Branch renamed',
-              details: 'Changed from conductor/memphis to fix-sidepanel-chat-issues',
-              completed: true
-            },
-            {
-              label: 'Fixed leftover chat messages',
-              details: 'Added state clearing logic when panel gains focus',
-              completed: true
-            },
-            {
-              label: 'Chat responsiveness',
-              details: "Optimized Planner agent's web_task handling",
-              completed: true
-            },
-            {
-              label: 'Fixed input sizing',
-              details: 'Improved auto-resize with 200px max height',
-              completed: true
-            }
-          ]
-        }
-      }
-    ]
-  };
-
   return {
-    workspaces,
-    activeWorkspaceId: 'ws-5',
+    workspaces: [],
+    activeWorkspaceId: null,
     tabs: [{ id: 't1', title: 'Claude', type: 'chat', active: true }],
     activeTabId: 't1',
-    messages,
+    messages: {},
     diffsByWorkspace: {},
     fileTreeByWorkspace: {},
     diffsLoadingByWorkspace: {}
