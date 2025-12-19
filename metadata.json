@@ -1,0 +1,5 @@
+{
+  "name": "Conductor AI Orchestrator",
+  "description": "A high-performance multi-agent orchestrator for AI-driven development using isolated Git worktrees and advanced reasoning models.",
+  "requestFramePermissions": []
+}
