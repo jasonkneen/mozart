@@ -4,11 +4,12 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, readdir, stat } from 'node:fs/promises';
+import { WebSocketServer } from 'ws';
 
 // Use Claude Code provider which spawns Claude CLI with its own auth
 import { claudeCode } from 'ai-sdk-provider-claude-code';
-import { streamText } from 'ai';
+import { streamText, convertToModelMessages } from 'ai';
 
 import {
   startLogin,
@@ -17,6 +18,8 @@ import {
   getStatus,
   logout
 } from './oauth.js';
+
+import { handleTerminalWebSocket } from './terminal.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -96,6 +99,18 @@ const saveState = async (state) => {
 const git = async (args, cwd) => {
   const { stdout } = await execFileAsync('git', args, { cwd });
   return stdout.trim();
+};
+
+const runScript = async (workspacePath, script) => {
+  const { stdout, stderr } = await execFileAsync('sh', ['-c', script], {
+    cwd: workspacePath,
+    env: {
+      ...process.env,
+      CONDUCTOR_WORKSPACE_PATH: workspacePath,
+      CONDUCTOR_ROOT_PATH: WORKSPACES_ROOT,
+    }
+  });
+  return stdout + stderr;
 };
 
 const slugify = (value) => value.toLowerCase().replace(/[^a-z0-9\\-]+/g, '-').replace(/^-+|-+$/g, '');
@@ -211,6 +226,58 @@ const getDiffs = async (workspacePath) => {
   }));
 };
 
+// Get diff hunks for a specific file
+const getFileDiffHunks = async (workspacePath, filePath) => {
+  try {
+    // Get the unified diff for this specific file
+    const diffOutput = await git(['diff', '--', filePath], workspacePath);
+    if (!diffOutput) {
+      // Try showing the file content for new files
+      const statusLines = await parseStatusLines(workspacePath);
+      const fileStatus = statusLines.find(s => s.filePath === filePath);
+      if (fileStatus?.status === '??') {
+        // Untracked file - read content and show as all additions
+        const fullPath = path.join(workspacePath, filePath);
+        const content = await readFile(fullPath, 'utf8');
+        const lines = content.split('\n').map(line => '+' + line);
+        return [{
+          header: `@@ -0,0 +1,${lines.length} @@ (new file)`,
+          lines: lines
+        }];
+      }
+      return [];
+    }
+
+    // Parse diff output into hunks
+    const hunks = [];
+    const lines = diffOutput.split('\n');
+    let currentHunk = null;
+
+    for (const line of lines) {
+      if (line.startsWith('@@')) {
+        if (currentHunk) {
+          hunks.push(currentHunk);
+        }
+        currentHunk = {
+          header: line,
+          lines: []
+        };
+      } else if (currentHunk && !line.startsWith('diff ') && !line.startsWith('index ') && !line.startsWith('---') && !line.startsWith('+++')) {
+        currentHunk.lines.push(line);
+      }
+    }
+
+    if (currentHunk) {
+      hunks.push(currentHunk);
+    }
+
+    return hunks;
+  } catch (error) {
+    console.error('Failed to get diff hunks:', error);
+    return [];
+  }
+};
+
 const addToTree = (root, filePath) => {
   const parts = filePath.split('/');
   let current = root;
@@ -308,6 +375,168 @@ const handleRequest = async (req, res) => {
     return sendJson(res, 200, { ok: true });
   }
 
+  if (parsed.pathname === '/api/file' && method === 'GET') {
+    try {
+      const filePath = parsed.searchParams.get('path');
+      if (!filePath) return sendError(res, 400, 'path is required');
+      const content = await readFile(filePath, 'utf8');
+      return sendJson(res, 200, { content });
+    } catch (error) {
+      return sendError(res, 404, 'File not found');
+    }
+  }
+
+  if (parsed.pathname === '/api/file' && method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      if (!body?.path) return sendError(res, 400, 'path is required');
+      if (typeof body.content !== 'string') return sendError(res, 400, 'content is required');
+      await writeFile(body.path, body.content, 'utf8');
+      return sendJson(res, 200, { success: true });
+    } catch (error) {
+      return sendError(res, 500, error.message || 'Failed to save file');
+    }
+  }
+
+  // ==========================================
+  // File Browser Endpoint
+  // ==========================================
+
+  if (parsed.pathname === '/api/files/browse' && method === 'GET') {
+    try {
+      let requestedPath = parsed.searchParams.get('path') || '~';
+
+      // Expand ~ to home directory
+      if (requestedPath.startsWith('~')) {
+        requestedPath = requestedPath.replace(/^~/, os.homedir());
+      }
+
+      // Resolve to absolute path
+      const absolutePath = path.resolve(requestedPath);
+
+      // Read directory contents
+      const dirEntries = await readdir(absolutePath, { withFileTypes: true });
+
+      const entries = await Promise.all(
+        dirEntries.map(async (dirent) => {
+          const entryPath = path.join(absolutePath, dirent.name);
+          const isHidden = dirent.name.startsWith('.');
+
+          return {
+            name: dirent.name,
+            path: entryPath,
+            isDirectory: dirent.isDirectory(),
+            isHidden
+          };
+        })
+      );
+
+      return sendJson(res, 200, {
+        path: absolutePath,
+        entries
+      });
+    } catch (error) {
+      return sendError(res, 500, error.message || 'Failed to browse directory');
+    }
+  }
+
+  // ==========================================
+  // GitHub Endpoints (uses gh CLI)
+  // ==========================================
+
+  if (parsed.pathname === '/api/github/auth/status' && method === 'GET') {
+    try {
+      const { stdout } = await execFileAsync('gh', ['auth', 'status', '--show-token'], { encoding: 'utf8' }).catch(() => ({ stdout: '' }));
+      if (!stdout || stdout.includes('not logged')) {
+        return sendJson(res, 200, { authenticated: false });
+      }
+      // Get user info
+      const userResult = await execFileAsync('gh', ['api', 'user'], { encoding: 'utf8' }).catch(() => ({ stdout: '{}' }));
+      const user = JSON.parse(userResult.stdout || '{}');
+      return sendJson(res, 200, {
+        authenticated: true,
+        user: {
+          login: user.login,
+          name: user.name,
+          avatar_url: user.avatar_url,
+          email: user.email,
+        }
+      });
+    } catch (error) {
+      return sendJson(res, 200, { authenticated: false });
+    }
+  }
+
+  if (parsed.pathname === '/api/github/repos' && method === 'GET') {
+    try {
+      const sort = parsed.searchParams.get('sort') || 'updated';
+      const limit = parsed.searchParams.get('limit') || '30';
+      const { stdout } = await execFileAsync('gh', [
+        'repo', 'list', '--json', 'name,fullName,description,url,sshUrl,defaultBranch,isPrivate,isFork,stargazerCount,primaryLanguage,updatedAt,pushedAt',
+        '--limit', limit,
+        '--sort', sort
+      ], { encoding: 'utf8' });
+      const repos = JSON.parse(stdout || '[]').map(r => ({
+        id: r.fullName,
+        name: r.name,
+        full_name: r.fullName,
+        description: r.description,
+        html_url: r.url,
+        clone_url: `${r.url}.git`,
+        ssh_url: r.sshUrl,
+        default_branch: r.defaultBranch,
+        private: r.isPrivate,
+        fork: r.isFork,
+        stargazers_count: r.stargazerCount,
+        language: r.primaryLanguage?.name || null,
+        updated_at: r.updatedAt,
+        pushed_at: r.pushedAt,
+      }));
+      return sendJson(res, 200, { repos });
+    } catch (error) {
+      return sendError(res, 500, error.message || 'Failed to fetch repos');
+    }
+  }
+
+  if (parsed.pathname === '/api/github/starred' && method === 'GET') {
+    try {
+      const limit = parsed.searchParams.get('limit') || '10';
+      const { stdout } = await execFileAsync('gh', [
+        'api', 'user/starred', '--jq', `.[0:${limit}] | .[] | {id: .id, name: .name, full_name: .full_name, description: .description, html_url: .html_url, clone_url: .clone_url, ssh_url: .ssh_url, default_branch: .default_branch, private: .private, fork: .fork, stargazers_count: .stargazers_count, language: .language, updated_at: .updated_at, pushed_at: .pushed_at}`
+      ], { encoding: 'utf8' });
+      const repos = stdout.trim().split('\n').filter(Boolean).map(line => {
+        try { return JSON.parse(line); } catch { return null; }
+      }).filter(Boolean);
+      return sendJson(res, 200, { repos });
+    } catch (error) {
+      return sendError(res, 500, error.message || 'Failed to fetch starred repos');
+    }
+  }
+
+  if (parsed.pathname === '/api/github/search' && method === 'GET') {
+    try {
+      const query = parsed.searchParams.get('q') || '';
+      if (!query) return sendJson(res, 200, { repos: [] });
+      const { stdout } = await execFileAsync('gh', [
+        'search', 'repos', query, '--json', 'fullName,description,url,stargazerCount,primaryLanguage,updatedAt', '--limit', '20'
+      ], { encoding: 'utf8' });
+      const repos = JSON.parse(stdout || '[]').map(r => ({
+        id: r.fullName,
+        name: r.fullName.split('/')[1],
+        full_name: r.fullName,
+        description: r.description,
+        html_url: r.url,
+        clone_url: `${r.url}.git`,
+        stargazers_count: r.stargazerCount,
+        language: r.primaryLanguage?.name || null,
+        updated_at: r.updatedAt,
+      }));
+      return sendJson(res, 200, { repos });
+    } catch (error) {
+      return sendError(res, 500, error.message || 'Failed to search repos');
+    }
+  }
+
   // ==========================================
   // OAuth Endpoints
   // ==========================================
@@ -390,6 +619,7 @@ const handleRequest = async (req, res) => {
   if (parsed.pathname === '/api/chat' && method === 'POST') {
     try {
       const body = await readJsonBody(req);
+      console.log('Chat request received:', JSON.stringify(body, null, 2));
       if (!body?.messages) {
         return sendError(res, 400, 'messages is required');
       }
@@ -404,7 +634,10 @@ const handleRequest = async (req, res) => {
       if (body.model?.includes('haiku')) modelId = 'haiku';
       if (body.model?.includes('opus')) modelId = 'opus';
 
-      // Use Claude Code provider with streaming - returns AI SDK compatible stream
+      // Convert UIMessages (from frontend) to ModelMessages (for AI SDK)
+      const modelMessages = convertToModelMessages(body.messages);
+
+      // Use Claude Code provider with streaming
       const result = streamText({
         model: claudeCode(modelId),
         maxTokens,
@@ -415,26 +648,11 @@ Available Trace Types: Thinking, Lint, Edit, Bash, Read, Plan.
 Format your response with a clear 'Summary' header.
 Use Markdown for rich text.
 When proposing a plan, use the 'Plan' trace type to describe steps.`,
-        messages: body.messages,
+        messages: modelMessages,
       });
 
-      // Return text stream response (claudeCode provider doesn't support toDataStreamResponse)
-      const response = result.toTextStreamResponse();
-
-      // Copy headers from AI SDK response
-      res.writeHead(response.status, Object.fromEntries(response.headers.entries()));
-
-      // Pipe the body
-      const reader = response.body?.getReader();
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          res.write(value);
-        }
-      }
-      res.end();
-      return; // Important: return after streaming
+      result.pipeUIMessageStreamToResponse(res);
+      return;
     } catch (error) {
       console.error('Chat error:', error);
       return sendError(res, 500, error.message || 'Failed to generate response');
@@ -476,29 +694,64 @@ When proposing a plan, use the 'Plan' trace type to describe steps.`,
     }
   }
 
-  if (parsed.pathname.startsWith('/api/workspaces/') && method === 'GET') {
+  if (parsed.pathname.startsWith('/api/workspaces/')) {
     const parts = parsed.pathname.split('/').filter(Boolean);
     const workspaceId = parts[2];
     const action = parts[3];
-    if (!workspaceId || !action) {
-      return sendError(res, 404, 'Not found');
-    }
+    
+    if (!workspaceId) return sendError(res, 404, 'Workspace ID required');
 
     const state = await loadState();
     const entry = state.workspaces[workspaceId];
     if (!entry) return sendError(res, 404, 'Workspace not found');
 
-    try {
-      if (action === 'diffs') {
-        const diffs = await getDiffs(entry.path);
-        return sendJson(res, 200, { diffs });
+    if (method === 'POST' && action === 'run-script') {
+      try {
+        const body = await readJsonBody(req);
+        const scriptType = body?.type;
+        if (!scriptType) return sendError(res, 400, 'script type is required');
+
+        const configPath = path.join(entry.path, 'conductor.json');
+        const config = JSON.parse(await readFile(configPath, 'utf8').catch(() => '{}'));
+        const script = config[scriptType];
+
+        if (!script) {
+          return sendError(res, 400, `No ${scriptType} script defined in conductor.json`);
+        }
+
+        const output = await runScript(entry.path, script);
+        return sendJson(res, 200, { success: true, output });
+      } catch (error) {
+        return sendError(res, 500, error.message || 'Failed to run script');
       }
-      if (action === 'files') {
-        const fileTree = await getFileTree(entry.path);
-        return sendJson(res, 200, { fileTree });
+    } else if (method === 'GET') {
+      try {
+        if (action === 'diffs') {
+          const diffs = await getDiffs(entry.path);
+          return sendJson(res, 200, { diffs });
+        }
+        if (action === 'files') {
+          const fileTree = await getFileTree(entry.path);
+          return sendJson(res, 200, { fileTree });
+        }
+        if (action === 'config') {
+          try {
+            const configPath = path.join(entry.path, 'conductor.json');
+            const content = await readFile(configPath, 'utf8');
+            return sendJson(res, 200, JSON.parse(content));
+          } catch {
+            return sendJson(res, 200, {});
+          }
+        }
+        if (action === 'diff-hunks') {
+          const filePathParam = parsed.searchParams.get('file');
+          if (!filePathParam) return sendError(res, 400, 'Missing file parameter');
+          const hunks = await getFileDiffHunks(entry.path, filePathParam);
+          return sendJson(res, 200, { hunks });
+        }
+      } catch (error) {
+        return sendError(res, 500, error.message || 'Failed to load workspace data');
       }
-    } catch (error) {
-      return sendError(res, 500, error.message || 'Failed to load workspace data');
     }
   }
 
@@ -770,8 +1023,23 @@ const start = async () => {
     });
   });
 
+  // WebSocket server for terminal
+  const wss = new WebSocketServer({ server, path: '/api/terminal' });
+
+  wss.on('connection', (ws, req) => {
+    const url = new URL(req.url || '/', `http://localhost:${PORT}`);
+    const cwd = url.searchParams.get('cwd') || process.cwd();
+    console.log(`Terminal WebSocket connected, cwd: ${cwd}`);
+    handleTerminalWebSocket(ws, cwd);
+  });
+
+  wss.on('error', (error) => {
+    console.error('WebSocket server error:', error);
+  });
+
   server.listen(PORT, () => {
     console.log(`Mozart API server running on http://localhost:${PORT}`);
+    console.log(`Terminal WebSocket available at ws://localhost:${PORT}/api/terminal`);
   });
 
   callbackServer.listen(OAUTH_CALLBACK_PORT, () => {

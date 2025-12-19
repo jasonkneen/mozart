@@ -2,12 +2,14 @@
 import React, { useState } from 'react';
 import { Workspace } from '../types';
 import { FLEET_CATEGORIES } from '../constants';
-import { 
-  Home, Plus, ChevronDown, GitBranch, Settings, Database, 
-  MessageSquare, Search, MoreHorizontal, X, FolderOpen, 
-  Link, Zap, Info
+import {
+  Home, Plus, ChevronDown, GitBranch, Settings, Database,
+  MessageSquare, Search, MoreHorizontal, X, FolderOpen,
+  Link, Zap, Info, Github
 } from 'lucide-react';
 import RepoModal, { RepoModalMode, RepoModalPayload } from './RepoModal';
+import GitHubReposBrowser from './GitHubReposBrowser';
+import { GitHubRepo } from '../services/githubService';
 
 interface SidebarProps {
   workspaces: Workspace[];
@@ -15,19 +17,26 @@ interface SidebarProps {
   onSelectWorkspace: (id: string) => void;
   onAddWorkspace: (options?: { repoPath?: string; repoUrl?: string; name?: string; branch?: string; baseBranch?: string }) => void;
   onSettingsClick: () => void;
+  onNotesClick?: () => void;
+  width?: number;
+  onResizeStart?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ 
-  workspaces, 
-  activeWorkspaceId, 
-  onSelectWorkspace, 
+const Sidebar: React.FC<SidebarProps> = ({
+  workspaces,
+  activeWorkspaceId,
+  onSelectWorkspace,
   onAddWorkspace,
-  onSettingsClick
+  onSettingsClick,
+  onNotesClick,
+  width = 280,
+  onResizeStart
 }) => {
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isRepoModalOpen, setIsRepoModalOpen] = useState(false);
   const [repoModalMode, setRepoModalMode] = useState<RepoModalMode>('local');
+  const [isGitHubBrowserOpen, setIsGitHubBrowserOpen] = useState(false);
 
   const handleOpenRepoModal = (mode: RepoModalMode) => {
     setRepoModalMode(mode);
@@ -46,152 +55,189 @@ const Sidebar: React.FC<SidebarProps> = ({
     setIsRepoModalOpen(false);
   };
 
+  const handleSelectGitHubRepo = (repo: GitHubRepo) => {
+    onAddWorkspace({
+      repoUrl: repo.clone_url,
+      name: repo.name,
+      baseBranch: repo.default_branch
+    });
+    setIsGitHubBrowserOpen(false);
+  };
+
+  const filteredWorkspaces = (fleetId: string) => {
+    return workspaces.filter(ws => {
+      if (ws.fleetType !== fleetId) return false;
+      if (!searchQuery) return true;
+      const query = searchQuery.toLowerCase();
+      return (
+        ws.name.toLowerCase().includes(query) ||
+        ws.branch.toLowerCase().includes(query) ||
+        (ws.location && ws.location.toLowerCase().includes(query))
+      );
+    });
+  };
+
   return (
-    <div className="w-[280px] h-full bg-[#0D0D0D] flex flex-col border-r border-white/5 shrink-0 text-[#E5E5E5] z-20 relative">
+    <div 
+      className="h-full bg-[#0A0A0A] flex flex-col border-r border-white/5 shrink-0 text-[#E5E5E5] z-20 relative"
+      style={{ width }}
+    >
+      <div
+        onMouseDown={onResizeStart}
+        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500/50 transition-colors z-50 translate-x-0.5"
+      />
+
       {/* Sidebar Header */}
       <div className="p-4 space-y-4">
-        <div className="flex items-center gap-3 px-2 py-1.5 hover:bg-white/5 rounded-md cursor-pointer transition-colors group">
-          <Home size={16} className="text-white/40 group-hover:text-white" />
-          <span className="text-sm font-medium text-white/60 group-hover:text-white">Home</span>
-        </div>
-
         <div className="relative group">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-white/40 transition-colors" />
           <input 
             type="text" 
-            placeholder="Search" 
+            placeholder="Search..." 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 outline-none rounded-lg pl-9 py-1.5 text-xs text-white placeholder:text-white/20 focus:border-white/20 transition-all"
+            className="w-full bg-white/5 border border-white/5 outline-none rounded-lg pl-9 py-1.5 text-xs text-white placeholder:text-white/20 focus:border-white/20 focus:bg-white/10 transition-all"
           />
         </div>
       </div>
 
       {/* Fleet Categories */}
       <div className="flex-1 overflow-y-auto px-2 space-y-6 scrollbar-hide">
-        {FLEET_CATEGORIES.map((fleet) => (
-          <div key={fleet.id} className="space-y-1">
-            <div className="flex items-center justify-between px-2 mb-1 group">
-              <span className="text-[10px] font-bold text-white/30 uppercase tracking-[0.1em]">{fleet.label}</span>
-              <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/5 rounded transition-all">
-                <MoreHorizontal size={14} className="text-white/20" />
-              </button>
-            </div>
+        {FLEET_CATEGORIES.map((fleet) => {
+          const fleetWorkspaces = filteredWorkspaces(fleet.id);
+          if (fleetWorkspaces.length === 0) return null;
 
-            <button 
-              onClick={onAddWorkspace}
-              className="w-full flex items-center gap-2 px-2 py-1.5 text-white/30 hover:text-white/50 text-xs font-medium rounded-md hover:bg-white/5 transition-all mb-1"
-            >
-              <Plus size={14} />
-              <span>New workspace</span>
-            </button>
+          return (
+            <div key={fleet.id} className="space-y-1">
+              <div className="flex items-center justify-between px-2 mb-2 group">
+                <span className="text-[10px] font-bold text-white/30 uppercase tracking-[0.1em]">{fleet.label}</span>
+                <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/5 rounded transition-all">
+                  <MoreHorizontal size={14} className="text-white/20" />
+                </button>
+              </div>
 
-            <div className="space-y-0.5">
-              {workspaces
-                .filter(ws => ws.fleetType === fleet.id)
-                .map((ws, idx) => (
+              {!searchQuery && (
+                <button
+                  onClick={() => onAddWorkspace()}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-white/30 hover:text-white/50 text-xs font-medium rounded-lg hover:bg-white/5 transition-all mb-1 group"
+                >
+                  <div className="w-5 h-5 flex items-center justify-center rounded bg-white/5 group-hover:bg-white/10 transition-colors">
+                    <Plus size={12} />
+                  </div>
+                  <span>New workspace</span>
+                </button>
+              )}
+
+              <div className="space-y-0.5">
+                {fleetWorkspaces.map((ws, idx) => (
                   <button
                     key={ws.id}
                     onClick={() => onSelectWorkspace(ws.id)}
-                    className={`w-full group relative flex flex-col gap-0.5 px-3 py-3 rounded-lg transition-all text-left border ${
+                    className={`w-full group relative flex flex-col gap-1 px-3 py-2.5 rounded-lg transition-all text-left border ${
                       activeWorkspaceId === ws.id 
                         ? 'bg-white/10 border-white/10 shadow-lg' 
                         : 'hover:bg-white/5 border-transparent'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 overflow-hidden flex-1">
-                        <GitBranch size={14} className={`shrink-0 ${activeWorkspaceId === ws.id ? 'text-white/60' : 'text-white/20'}`} />
-                        <span className={`text-[13px] font-medium truncate ${activeWorkspaceId === ws.id ? 'text-white' : 'text-white/60'}`}>
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
+                        <GitBranch size={14} className={`shrink-0 ${activeWorkspaceId === ws.id ? 'text-white' : 'text-white/40'}`} />
+                        <span className={`text-[13px] font-medium truncate ${activeWorkspaceId === ws.id ? 'text-white' : 'text-white/70'}`}>
                           {ws.branch}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                         <span className="text-[10px] font-bold text-green-500">+{ws.diffs.added}</span>
-                         <span className="text-[10px] font-bold text-red-500">-{ws.diffs.removed}</span>
-                      </div>
+                      {idx < 6 && (
+                        <span className={`text-[10px] font-mono opacity-0 group-hover:opacity-100 transition-opacity ${activeWorkspaceId === ws.id ? 'text-white/40' : 'text-white/20'}`}>
+                          ⌘{idx + 1}
+                        </span>
+                      )}
                     </div>
                     
-                    <div className="flex items-center justify-between mt-0.5">
-                      <div className="flex items-center gap-2 text-[11px] text-white/30">
-                        <span className="truncate max-w-[80px]">{ws.location}</span>
-                        <span className="w-1 h-1 bg-white/10 rounded-full" />
-                        <span className={
-                          ws.status === 'Ready to merge' ? 'text-green-500/80' : 
-                          ws.status === 'Merge conflicts' ? 'text-red-500/80' : 
-                          ws.status === 'Archive' ? 'text-white/20' : ''
-                        }>
-                          {ws.status}
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-white/10 font-mono">#{idx + 1}</span>
+                    <div className="flex items-center gap-2 text-[11px] text-white/30 pl-5.5">
+                      <span className="truncate max-w-[100px]">{ws.location || 'Local'}</span>
+                      <span className="text-white/10">•</span>
+                      <span>{ws.timeAgo || 'now'}</span>
                     </div>
 
                     {activeWorkspaceId === ws.id && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-6 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-blue-500 rounded-r-full shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
                     )}
                   </button>
                 ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Notes / NEW Callout */}
-      <div className="mx-4 mb-4 bg-[#2A1D1D]/40 border border-white/5 rounded-xl p-4 shadow-2xl">
-        <div className="flex items-center justify-between mb-2">
-           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-red-400">
-             <span className="bg-red-400 text-black px-1 rounded text-[8px] font-black">NEW</span>
-             Notes
-           </div>
-           <button className="text-white/20 hover:text-white"><X size={14} /></button>
+      <div 
+        onClick={onNotesClick}
+        className="mx-3 mb-3 bg-[#1A1A1A] border border-white/5 rounded-xl p-3 shadow-lg cursor-pointer hover:bg-[#222] transition-all group relative overflow-hidden"
+      >
+        <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+           <X size={12} className="text-white/20 hover:text-white" onClick={(e) => { e.stopPropagation(); }} />
         </div>
-        <p className="text-[11px] text-white/50 leading-relaxed">
-          Each workspace now has a scratchpad. Share notes with agents using @notes.
+        <div className="flex items-center gap-2 mb-1">
+           <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+           <span className="text-[10px] font-bold uppercase tracking-wider text-white/60">Updates</span>
+        </div>
+        <p className="text-[11px] text-white/40 leading-relaxed">
+          Scratchpad available. Share notes with @notes.
         </p>
       </div>
 
       {/* Sidebar Footer */}
-      <div className="mt-auto p-4 border-t border-white/5 space-y-4 bg-black/40">
-        <div className="relative">
-          <button 
-            onClick={() => setIsAddMenuOpen(!isAddMenuOpen)}
-            className="w-full flex items-center gap-3 px-2 py-1.5 hover:bg-white/5 rounded-md text-white/40 hover:text-white transition-colors"
-          >
-            <Plus size={16} />
-            <span className="text-sm font-medium">Add repository</span>
-          </button>
-          
-              {isAddMenuOpen && (
-            <div className="absolute bottom-full left-0 mb-2 w-full bg-[#1A1A1A] border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2">
-              <button
-                onClick={() => handleOpenRepoModal('local')}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors"
-              >
-                <FolderOpen size={14} /> Open project
-              </button>
-              <button
-                onClick={() => handleOpenRepoModal('url')}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors border-t border-white/5"
-              >
-                <Link size={14} /> Clone from URL
-              </button>
-              <button
-                onClick={() => onAddWorkspace()}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors border-t border-white/5"
-              >
-                <Zap size={14} /> Quick start
-              </button>
-            </div>
-          )}
-        </div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button className="p-2 text-white/30 hover:text-white transition-colors"><Database size={18} /></button>
-            <button className="p-2 text-white/30 hover:text-white transition-colors"><MessageSquare size={18} /></button>
+      <div className="mt-auto p-3 border-t border-white/5 bg-[#0A0A0A]">
+        <div className="flex flex-col gap-1">
+          <div className="relative">
+             <button 
+               onClick={() => setIsAddMenuOpen(!isAddMenuOpen)}
+               className="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors group"
+             >
+               <Plus size={16} className="text-white/20 group-hover:text-white transition-colors" />
+               <span className="text-sm font-medium">Add repository</span>
+             </button>
+             
+             {isAddMenuOpen && (
+              <div className="absolute bottom-full left-0 mb-2 w-full bg-[#1A1A1A] border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 z-50">
+                <button
+                  onClick={() => handleOpenRepoModal('local')}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  <FolderOpen size={14} /> Open project
+                </button>
+                <button
+                  onClick={() => handleOpenRepoModal('url')}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors border-t border-white/5"
+                >
+                  <Link size={14} /> Clone from URL
+                </button>
+                <button
+                  onClick={() => {
+                    setIsGitHubBrowserOpen(true);
+                    setIsAddMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors border-t border-white/5"
+                >
+                  <Github size={14} /> Browse GitHub
+                </button>
+                <button
+                  onClick={() => onAddWorkspace()}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors border-t border-white/5"
+                >
+                  <Zap size={14} /> Quick start
+                </button>
+              </div>
+            )}
           </div>
-          <button onClick={onSettingsClick} className="p-2 text-white/30 hover:text-white transition-colors">
-            <Settings size={18} />
+
+          <button 
+            onClick={onSettingsClick} 
+            className="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors group"
+          >
+            <Settings size={16} className="text-white/20 group-hover:text-white transition-colors" />
+            <span className="text-sm font-medium">Settings</span>
           </button>
         </div>
       </div>
@@ -201,6 +247,12 @@ const Sidebar: React.FC<SidebarProps> = ({
         mode={repoModalMode}
         onClose={() => setIsRepoModalOpen(false)}
         onCreate={handleCreateRepoWorkspace}
+      />
+
+      <GitHubReposBrowser
+        isOpen={isGitHubBrowserOpen}
+        onClose={() => setIsGitHubBrowserOpen(false)}
+        onSelectRepo={handleSelectGitHubRepo}
       />
     </div>
   );

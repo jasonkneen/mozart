@@ -1,4 +1,4 @@
-import { FileDiff, FileNode, Workspace } from '../types';
+import { FileDiff, FileNode, Workspace, DiffHunk } from '../types';
 
 type CreateWorkspaceInput = {
   name?: string;
@@ -67,5 +67,24 @@ export const gitService = {
       })
     });
     return payload.exists;
+  },
+
+  async getFileDiffHunks(workspaceId: string, filePath: string): Promise<DiffHunk[]> {
+    const payload = await request<{ hunks: DiffHunk[] }>(
+      `/workspaces/${workspaceId}/diff-hunks?file=${encodeURIComponent(filePath)}`
+    );
+    return payload.hunks;
+  },
+  
+  async getWorkspaceConfig(workspaceId: string): Promise<any> {
+    return request<any>(`/workspaces/${workspaceId}/config`);
+  },
+
+  async runWorkspaceScript(workspaceId: string, type: 'setup' | 'run' | 'archive'): Promise<{ success: boolean; output: string }> {
+    return request<{ success: boolean; output: string }>(`/workspaces/${workspaceId}/run-script`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type })
+    });
   }
 };

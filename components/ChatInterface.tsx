@@ -1,15 +1,62 @@
-import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react'
+import React, { useRef, useEffect, useState, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import SyntaxHighlighter from 'react-syntax-highlighter'
 import { atelierSulphurpoolDark } from 'react-syntax-highlighter/dist/esm/styles/hljs'
 import {
-  Send, Paperclip, Sparkles, ChevronDown, ListRestart, Brain, ChevronRight,
-  Copy, Check, Loader, AlertCircle, Code, Zap, Settings, ImageIcon, FileText
+  Send, Paperclip, Sparkles, ChevronDown, Brain, ChevronRight,
+  Copy, Check, Zap, ClipboardList, AlertTriangle, Link, ArrowUpRight
 } from 'lucide-react'
-import { useChat } from '@ai-sdk/react'
-import clsx from 'clsx'
+const BRAILLE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
-const API_BASE = (import.meta as { env?: Record<string, string> }).env?.VITE_CONDUCTOR_API_BASE || '/api'
+function BrailleSpinner() {
+  const [frame, setFrame] = React.useState(0)
+  
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setFrame(f => (f + 1) % BRAILLE_FRAMES.length)
+    }, 80)
+    return () => clearInterval(interval)
+  }, [])
+  
+  return <span className="text-white/40 ml-1">{BRAILLE_FRAMES[frame]}</span>
+}
+
+interface MessageFooterProps {
+  duration?: number
+  content: string
+  onCopy: () => void
+  isCopied: boolean
+}
+
+function MessageFooter({ duration, content, onCopy, isCopied }: MessageFooterProps) {
+  return (
+    <div className="flex items-center gap-3 mt-3 text-white/30">
+      {duration !== undefined && (
+        <span className="text-xs font-mono">{duration}s</span>
+      )}
+      <span className="text-white/10">·</span>
+      <button
+        onClick={onCopy}
+        className="p-1 hover:text-white/50 transition-colors"
+        title="Copy message"
+      >
+        {isCopied ? <Check size={14} /> : <Copy size={14} />}
+      </button>
+      <button
+        className="p-1 hover:text-white/50 transition-colors"
+        title="Fork conversation"
+      >
+        <ArrowUpRight size={14} />
+      </button>
+    </div>
+  )
+}
+import { useChat, UIMessage } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
+import clsx from 'clsx'
+import { useConductorStore } from '../services/store'
+
+const API_BASE = (import.meta as any).env?.VITE_CONDUCTOR_API_BASE || '/api'
 
 interface ToolCall {
   id: string
@@ -39,9 +86,19 @@ interface ExtendedMessage {
   artifacts?: Array<{ type: string; content: string; filename: string }>
   images?: string[]
   isStreaming?: boolean
+  startTime?: number
+  duration?: number
 }
 
-const ChatInterface: React.FC = () => {
+interface ChatInterfaceProps {
+  tabId: string
+}
+
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
+  const { state } = useConductorStore()
+  const { activeWorkspaceId, workspaces } = state
+  const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -49,27 +106,51 @@ const ChatInterface: React.FC = () => {
   const [showThinkingBlocks, setShowThinkingBlocks] = useState<Record<string, boolean>>({})
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [selectedModel, setSelectedModel] = useState('sonnet')
+  const [input, setInput] = useState('')
+  const [thinkingLevel, setThinkingLevel] = useState<'think' | 'megathink' | 'ultrathink'>('think')
+  const [planMode, setPlanMode] = useState(false)
+  const [inputFocused, setInputFocused] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitTime, setSubmitTime] = useState<number | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages } = useChat({
-    api: `${API_BASE}/chat`,
-    onFinish: (message) => {
+  const { messages, sendMessage, status, setMessages } = useChat({
+    id: tabId,
+    transport: new DefaultChatTransport({
+      api: `${API_BASE}/chat`,
+      body: {
+        model: selectedModel,
+      },
+    }),
+    onFinish: ({ message }: { message: UIMessage }) => {
+      const duration = submitTime ? Math.round((Date.now() - submitTime) / 1000) : undefined
+      setIsSubmitting(false)
+      setSubmitTime(null)
       setExtendedMessages(prev => {
         const updated = [...prev]
         const lastIdx = updated.findIndex(m => m.id === message.id)
         if (lastIdx >= 0) {
+          const textContent = message.parts
+            .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+            .map(p => p.text)
+            .join('')
           updated[lastIdx] = {
             ...updated[lastIdx],
-            content: message.content,
+            content: textContent,
             isStreaming: false,
+            duration,
           }
         }
         return updated
       })
     },
     onError: (error) => {
+      setIsSubmitting(false)
       console.error('Chat error:', error)
     },
   })
+
+  const isLoading = status === 'submitted' || status === 'streaming'
 
   // Parse message content into structured parts
   const parseMessageParts = useCallback((content: string, role: 'user' | 'assistant'): MessagePart[] => {
@@ -82,13 +163,13 @@ const ChatInterface: React.FC = () => {
 
     // Extract thinking blocks
     const thinkingRegex = /<Thinking>([\s\S]*?)<\/Thinking>/g
-    let thinkingMatch
+    let thinkingMatch: RegExpExecArray | null
     while ((thinkingMatch = thinkingRegex.exec(remaining)) !== null) {
       const before = remaining.substring(0, thinkingMatch.index)
       if (before) {
         parts.push({ type: 'text', content: before })
       }
-      parts.push({ type: 'thinking', content: thinkingMatch[1].trim() })
+      parts.push({ type: 'thinking', content: thinkingMatch[1]?.trim() || '' })
       remaining = remaining.substring(thinkingMatch.index + thinkingMatch[0].length)
     }
 
@@ -99,46 +180,108 @@ const ChatInterface: React.FC = () => {
     return parts.length > 0 ? parts : [{ type: 'text', content }]
   }, [])
 
+  // Helper to extract text content from UIMessage parts
+  const getMessageContent = useCallback((msg: UIMessage): string => {
+    return msg.parts
+      .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+      .map(p => p.text)
+      .join('')
+  }, [])
+
   // Sync AI SDK messages with extended messages
   useEffect(() => {
-    const newExtendedMessages = messages.map((msg) => {
-      const existing = extendedMessages.find(m => m.id === msg.id)
-      if (existing) {
-        return existing
-      }
+    setExtendedMessages(prev => {
+      const newExtendedMessages = messages.map((msg) => {
+        const existing = prev.find(m => m.id === msg.id)
+        const rawContent = getMessageContent(msg)
+        
+        if (existing && !isLoading && !rawContent.includes('<Thinking>') && existing.content === rawContent) {
+          return existing
+        }
 
-      const parts = parseMessageParts(msg.content, msg.role)
+        const parts = parseMessageParts(rawContent, msg.role as 'user' | 'assistant')
 
-      return {
-        id: msg.id,
-        role: msg.role,
-        content: msg.content,
-        parts,
-        thinking: parts.find(p => p.type === 'thinking')?.content,
-        showThinking: false,
-        isStreaming: false,
-      }
+        return {
+          id: msg.id,
+          role: msg.role as 'user' | 'assistant',
+          content: rawContent,
+          parts,
+          thinking: parts.find(p => p.type === 'thinking')?.content,
+          showThinking: existing?.showThinking ?? false,
+          isStreaming: isLoading && msg.id === messages[messages.length - 1]?.id,
+        }
+      })
+      return newExtendedMessages
     })
-
-    setExtendedMessages(newExtendedMessages)
-  }, [messages, parseMessageParts])
+  }, [messages, parseMessageParts, isLoading, getMessageContent])
 
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [extendedMessages, isLoading])
 
+  useEffect(() => {
+    if (status === 'streaming') setIsSubmitting(false)
+  }, [status])
+
+  // ⌘L to focus input, ⇧Tab to toggle plan mode
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
+        e.preventDefault()
+        inputRef.current?.focus()
+      }
+      if (e.shiftKey && e.key === 'Tab') {
+        e.preventDefault()
+        setPlanMode(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [])
+
   const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    handleSubmit(e)
+    if (input.trim() && !isLoading && !isSubmitting) {
+      let content = input.trim()
+      
+      if (content === '/clear') {
+        setMessages([])
+        setInput('')
+        return
+      }
+
+      if (content.includes('@notes') && activeWorkspace?.notes) {
+        content = content.replace('@notes', `\n\n<notes>\n${activeWorkspace.notes}\n</notes>`)
+      }
+
+      setIsSubmitting(true)
+      setSubmitTime(Date.now())
+      setInput('')
+      sendMessage({ text: content })
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      const form = e.currentTarget.form
-      if (form && input.trim()) {
-        handleSubmit({ preventDefault: () => {} } as React.FormEvent<HTMLFormElement>)
+      if (input?.trim() && !isLoading && !isSubmitting) {
+        let content = input.trim()
+
+        if (content === '/clear') {
+          setMessages([])
+          setInput('')
+          return
+        }
+
+        if (content.includes('@notes') && activeWorkspace?.notes) {
+          content = content.replace('@notes', `\n\n<notes>\n${activeWorkspace.notes}\n</notes>`)
+        }
+
+        setIsSubmitting(true)
+        setSubmitTime(Date.now())
+        setInput('')
+        sendMessage({ text: content })
       }
     }
   }
@@ -165,7 +308,6 @@ const ChatInterface: React.FC = () => {
       reader.onload = (event) => {
         const result = event.target?.result
         if (typeof result === 'string') {
-          // Add image or file content to message
           console.log('File loaded:', file.name)
         }
       }
@@ -181,23 +323,31 @@ const ChatInterface: React.FC = () => {
         className="flex-1 overflow-y-auto p-12 space-y-8 max-w-5xl mx-auto w-full scroll-smooth scrollbar-hide min-h-0"
       >
         {extendedMessages.length === 0 && (
-          <div className="flex items-center gap-3 px-4 py-2 bg-white/5 border border-white/5 rounded-lg text-white/40">
-            <ListRestart size={14} />
-            <span className="text-xs font-mono font-medium">Start a conversation</span>
+          <div className="pt-6">
+            <p className="text-white/50 text-sm mb-4">
+              New chat in <span className="font-mono text-white/70">/{activeWorkspace?.location || 'workspace'}</span>. Add context:
+            </p>
+            <button className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white/70 hover:bg-white/10 transition-colors">
+              <Sparkles size={12} className="text-white/50" />
+              <span className="text-xs font-medium">Claude</span>
+            </button>
           </div>
         )}
 
-        {extendedMessages.map((msg) => (
-          <div key={msg.id} className="space-y-4">
+        {extendedMessages.map((msg, msgIndex) => {
+          const turnNumber = Math.floor(msgIndex / 2) + 1
+          return (
+          <div key={msg.id} className="relative">
+            <div className="absolute -left-8 top-0 text-xs font-mono text-white/20 select-none">
+              {msg.role === 'assistant' && turnNumber}
+            </div>
             {msg.role === 'user' ? (
-              /* User Message */
               <div className="flex justify-end">
                 <div className="bg-white/[0.08] border border-white/10 px-5 py-3 rounded-2xl text-[14px] font-medium text-white/90 shadow-xl max-w-[85%] leading-relaxed hover:bg-white/[0.12] transition-colors">
                   {msg.content}
                 </div>
               </div>
             ) : (
-              /* Assistant Message */
               <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
                 {msg.thinking && (
                   <ThinkingBlock
@@ -207,20 +357,15 @@ const ChatInterface: React.FC = () => {
                   />
                 )}
 
-                {/* Main Content */}
                 <div className="space-y-3">
                   {msg.parts.map((part, idx) => {
                     const partId = `${msg.id}-${idx}`
-
-                    if (part.type === 'thinking') {
-                      return null
-                    }
-
+                    if (part.type === 'thinking') return null
                     if (part.type === 'text') {
                       return (
                         <div
                           key={partId}
-                          className="prose prose-invert prose-sm max-w-none text-[15px] leading-relaxed text-white/85 font-normal [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+                          className="prose prose-invert prose-sm max-w-none text-[15px] leading-relaxed text-white/85 font-normal"
                         >
                           <ReactMarkdown
                             components={{
@@ -235,11 +380,9 @@ const ChatInterface: React.FC = () => {
                                     </code>
                                   )
                                 }
-
                                 const match = /language-(\w+)/.exec(className || '')
                                 const language = match ? match[1] : 'text'
                                 const code = String(children).replace(/\n$/, '')
-
                                 return (
                                   <CodeBlock
                                     code={code}
@@ -249,93 +392,6 @@ const ChatInterface: React.FC = () => {
                                   />
                                 )
                               },
-                              table: ({ children, ...props }: any) => (
-                                <div className="overflow-x-auto">
-                                  <table
-                                    className="border-collapse border border-white/10 text-sm"
-                                    {...props}
-                                  >
-                                    {children}
-                                  </table>
-                                </div>
-                              ),
-                              th: ({ children, ...props }: any) => (
-                                <th
-                                  className="border border-white/10 bg-white/5 px-3 py-2 font-semibold text-left"
-                                  {...props}
-                                >
-                                  {children}
-                                </th>
-                              ),
-                              td: ({ children, ...props }: any) => (
-                                <td
-                                  className="border border-white/10 px-3 py-2"
-                                  {...props}
-                                >
-                                  {children}
-                                </td>
-                              ),
-                              h1: ({ children, ...props }: any) => (
-                                <h1
-                                  className="text-2xl font-bold mt-6 mb-3 text-white"
-                                  {...props}
-                                >
-                                  {children}
-                                </h1>
-                              ),
-                              h2: ({ children, ...props }: any) => (
-                                <h2
-                                  className="text-xl font-bold mt-5 mb-2 text-white"
-                                  {...props}
-                                >
-                                  {children}
-                                </h2>
-                              ),
-                              h3: ({ children, ...props }: any) => (
-                                <h3
-                                  className="text-lg font-bold mt-4 mb-2 text-white/90"
-                                  {...props}
-                                >
-                                  {children}
-                                </h3>
-                              ),
-                              ul: ({ children, ...props }: any) => (
-                                <ul
-                                  className="list-disc list-inside space-y-1 my-2"
-                                  {...props}
-                                >
-                                  {children}
-                                </ul>
-                              ),
-                              ol: ({ children, ...props }: any) => (
-                                <ol
-                                  className="list-decimal list-inside space-y-1 my-2"
-                                  {...props}
-                                >
-                                  {children}
-                                </ol>
-                              ),
-                              li: ({ children, ...props }: any) => (
-                                <li className="ml-2" {...props}>
-                                  {children}
-                                </li>
-                              ),
-                              a: ({ children, ...props }: any) => (
-                                <a
-                                  className="text-blue-400 hover:text-blue-300 underline transition-colors"
-                                  {...props}
-                                >
-                                  {children}
-                                </a>
-                              ),
-                              blockquote: ({ children, ...props }: any) => (
-                                <blockquote
-                                  className="border-l-4 border-blue-400/30 pl-4 italic text-white/70 my-3"
-                                  {...props}
-                                >
-                                  {children}
-                                </blockquote>
-                              ),
                             }}
                           >
                             {part.content}
@@ -343,21 +399,31 @@ const ChatInterface: React.FC = () => {
                         </div>
                       )
                     }
-
                     return null
                   })}
 
                   {isLoading && msg.isStreaming && (
-                    <div className="flex items-center gap-2 text-white/40">
-                      <Loader size={14} className="animate-spin" />
-                      <span className="text-xs">Generating response...</span>
-                    </div>
+                    <BrailleSpinner />
+                  )}
+
+                  {!msg.isStreaming && msg.content && (
+                    <MessageFooter
+                      duration={msg.duration}
+                      content={msg.content}
+                      onCopy={() => copyToClipboard(msg.content, `msg-${msg.id}`)}
+                      isCopied={copiedId === `msg-${msg.id}`}
+                    />
                   )}
                 </div>
               </div>
             )}
           </div>
-        ))}
+        )})}
+        
+
+        {(isSubmitting || isLoading) && !extendedMessages.some(m => m.isStreaming) && (
+          <BrailleSpinner />
+        )}
 
         <div ref={messagesEndRef} />
       </div>
@@ -366,32 +432,60 @@ const ChatInterface: React.FC = () => {
       <div className="p-12 pt-0 max-w-5xl mx-auto w-full">
         <form
           onSubmit={handleFormSubmit}
-          className="rounded-2xl border border-white/10 p-2 shadow-2xl transition-all focus-within:border-white/20 bg-white/[0.03] backdrop-blur-xl"
+          className={clsx(
+            "rounded-2xl border p-2 shadow-2xl transition-all bg-white/[0.03] backdrop-blur-xl",
+            planMode ? "plan-mode-border" : "border-white/10 focus-within:border-white/20"
+          )}
         >
           <div className="flex items-start px-4 pt-2 gap-3">
             <textarea
+              ref={inputRef}
               value={input}
-              onChange={handleInputChange}
+              onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
               placeholder="Ask to make changes, @mention files, run /commands"
               className="flex-1 bg-transparent border-none outline-none resize-none text-[15px] text-white placeholder:text-white/20 min-h-[44px] max-h-[200px]"
               rows={1}
             />
-            <span className="text-[10px] text-white/20 font-mono shrink-0 uppercase tracking-tighter pt-1">⌘L</span>
+            {!inputFocused && (
+              <span className="text-[10px] text-white/20 font-mono shrink-0 uppercase tracking-tighter pt-1">⌘L</span>
+            )}
           </div>
 
           <div className="flex items-center justify-between px-2 py-1 mt-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} />
+              <button
+                type="button"
+                onClick={() => setPlanMode(!planMode)}
+                className={clsx(
+                  'p-2 rounded-lg transition-colors',
+                  planMode ? 'text-blue-400 bg-blue-500/10' : 'text-white/40 hover:text-white/60 hover:bg-white/5'
+                )}
+                title="Plan mode (⇧Tab)"
+              >
+                <ClipboardList size={16} />
+              </button>
+              <ThinkingLevelSelector level={thinkingLevel} onChange={setThinkingLevel} />
+              <MCPStatus connected={3} failed={0} />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className="p-2 text-white/40 hover:text-white/60 transition-colors hover:bg-white/5 rounded-lg"
+                title="Linear (⌘I)"
+              >
+                <Link size={16} />
+              </button>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="p-2 text-white/40 hover:text-white/60 transition-colors hover:bg-white/5 rounded-lg"
                 title="Attach file"
               >
-                <Paperclip size={18} />
+                <Paperclip size={16} />
               </button>
               <input
                 ref={fileInputRef}
@@ -399,14 +493,13 @@ const ChatInterface: React.FC = () => {
                 multiple
                 onChange={handleFileInput}
                 className="hidden"
-                accept="image/*,.pdf,.txt,.json,.csv,.js,.ts,.tsx,.jsx,.py,.java,.cpp,.c,.go,.rs,.rb,.php"
               />
               <button
                 type="submit"
-                disabled={!input.trim() || isLoading}
+                disabled={!input?.trim() || isLoading}
                 className={clsx(
                   'p-2.5 rounded-xl transition-all shadow-xl active:scale-90',
-                  input.trim() && !isLoading
+                  input?.trim() && !isLoading
                     ? 'bg-blue-500/30 hover:bg-blue-500/40 text-blue-300'
                     : 'bg-white/10 text-white/40'
                 )}
@@ -447,23 +540,8 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({ content, isOpen, onToggle
 
     {isOpen && (
       <div className="px-4 py-3 border-t border-white/10 bg-white/[0.02] max-h-[500px] overflow-y-auto">
-        <div className="prose prose-invert prose-sm max-w-none text-[13px] leading-relaxed text-white/50 font-normal [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-          <ReactMarkdown
-            components={{
-              code: ({ className, inline, children, ...props }: any) => (
-                <code
-                  className={clsx(
-                    inline ? 'bg-white/10 px-1.5 py-0.5 rounded text-xs' : 'block bg-white/5 p-3 rounded text-xs overflow-x-auto'
-                  )}
-                  {...props}
-                >
-                  {children}
-                </code>
-              ),
-            }}
-          >
-            {content}
-          </ReactMarkdown>
+        <div className="prose prose-invert prose-sm max-w-none text-[13px] leading-relaxed text-white/50 font-normal">
+          <ReactMarkdown>{content}</ReactMarkdown>
         </div>
       </div>
     )}
@@ -488,15 +566,9 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, onCopy, isCopied 
         className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-white/40 hover:text-white/60 hover:bg-white/10 transition-colors"
       >
         {isCopied ? (
-          <>
-            <Check size={14} />
-            <span>Copied</span>
-          </>
+          <><Check size={14} /><span>Copied</span></>
         ) : (
-          <>
-            <Copy size={14} />
-            <span>Copy</span>
-          </>
+          <><Copy size={14} /><span>Copy</span></>
         )}
       </button>
     </div>
@@ -519,7 +591,6 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, onCopy, isCopied 
   </div>
 )
 
-// Component: Model Selector
 interface ModelSelectorProps {
   selectedModel: string
   onModelChange: (model: string) => void
@@ -527,14 +598,32 @@ interface ModelSelectorProps {
 
 const ModelSelector: React.FC<ModelSelectorProps> = ({ selectedModel, onModelChange }) => {
   const [isOpen, setIsOpen] = useState(false)
-
-  const models = [
-    { id: 'haiku', name: 'Haiku', icon: Zap, desc: 'Fast & efficient' },
-    { id: 'sonnet', name: 'Sonnet', icon: Brain, desc: 'Balanced' },
-    { id: 'opus', name: 'Opus', icon: Sparkles, desc: 'Most capable' },
+  
+  const modelGroups = [
+    {
+      name: 'Claude Code',
+      icon: Sparkles,
+      models: [
+        { id: 'opus', name: 'Opus 4.5', desc: 'Most capable' },
+        { id: 'sonnet', name: 'Sonnet 4.5', desc: 'Balanced' },
+        { id: 'haiku', name: 'Haiku 4.5', desc: 'Fast & efficient' },
+      ]
+    },
+    {
+      name: 'Codex',
+      icon: Zap,
+      models: [
+        { id: 'gpt-5.2-codex', name: 'GPT-5.2-Codex', desc: 'Latest', isNew: true },
+        { id: 'gpt-5.2', name: 'GPT-5.2', desc: 'Standard' },
+        { id: 'gpt-5.1-codex-max', name: 'GPT-5.1-Codex-Max', desc: 'Extended context' },
+      ]
+    }
   ]
-
-  const current = models.find(m => m.id === selectedModel) || models[1]
+  
+  const allModels = modelGroups.flatMap(g => g.models)
+  const current = allModels.find(m => m.id === selectedModel) || modelGroups[0].models[1]
+  const currentGroup = modelGroups.find(g => g.models.some(m => m.id === selectedModel)) || modelGroups[0]
+  const GroupIcon = currentGroup.icon
 
   return (
     <div className="relative">
@@ -543,38 +632,136 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ selectedModel, onModelCha
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-all text-xs text-white/60 hover:text-white/80"
       >
-        <current.icon size={14} />
+        <GroupIcon size={14} />
         <span>{current.name}</span>
         <ChevronDown size={12} className={clsx('transition-transform', isOpen && 'rotate-180')} />
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full mb-2 left-0 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50 min-w-[180px]">
-          {models.map(model => {
-            const Icon = model.icon
-            return (
-              <button
-                key={model.id}
-                type="button"
-                onClick={() => {
-                  onModelChange(model.id)
-                  setIsOpen(false)
-                }}
-                className={clsx(
-                  'w-full flex items-start gap-2 px-3 py-2.5 text-xs transition-colors border-b border-white/5 last:border-b-0',
-                  selectedModel === model.id
-                    ? 'bg-white/10 text-white'
-                    : 'text-white/60 hover:bg-white/5 hover:text-white/80'
-                )}
-              >
-                <Icon size={14} className="mt-0.5 shrink-0" />
-                <div className="text-left">
-                  <div className="font-medium">{model.name}</div>
-                  <div className="text-white/40 text-[11px]">{model.desc}</div>
-                </div>
-              </button>
-            )
-          })}
+        <div className="absolute bottom-full mb-2 left-0 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50 min-w-[200px]">
+          {modelGroups.map((group, groupIdx) => (
+            <div key={group.name}>
+              <div className="px-3 py-2 text-[10px] font-semibold text-white/40 uppercase tracking-wider bg-white/[0.02]">
+                {group.name}
+              </div>
+              {group.models.map(model => (
+                <button
+                  key={model.id}
+                  type="button"
+                  onClick={() => {
+                    onModelChange(model.id)
+                    setIsOpen(false)
+                  }}
+                  className={clsx(
+                    'w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors',
+                    selectedModel === model.id ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5 hover:text-white/80'
+                  )}
+                >
+                  <group.icon size={14} className="shrink-0 text-white/40" />
+                  <span className="flex-1 text-left">{model.name}</span>
+                  {model.isNew && (
+                    <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase bg-blue-500/20 text-blue-400 rounded">New</span>
+                  )}
+                  {selectedModel === model.id && <Check size={14} className="text-white/60" />}
+                </button>
+              ))}
+              {groupIdx < modelGroups.length - 1 && <div className="border-t border-white/5" />}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface ThinkingLevelSelectorProps {
+  level: 'think' | 'megathink' | 'ultrathink'
+  onChange: (level: 'think' | 'megathink' | 'ultrathink') => void
+}
+
+const ThinkingLevelSelector: React.FC<ThinkingLevelSelectorProps> = ({ level, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false)
+  const levels = [
+    { id: 'think' as const, name: 'Think', desc: 'Basic reasoning' },
+    { id: 'megathink' as const, name: 'Megathink', desc: 'Deeper analysis' },
+    { id: 'ultrathink' as const, name: 'Ultrathink', desc: 'Maximum reasoning' },
+  ]
+  const current = levels.find(l => l.id === level) || levels[0]
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-1.5 p-2 text-white/40 hover:text-white/60 hover:bg-white/5 rounded-lg transition-colors"
+        title="Adjust thinking level"
+      >
+        <Brain size={16} />
+        <span className="text-[10px] font-medium">:</span>
+      </button>
+
+      {isOpen && (
+        <div className="absolute bottom-full mb-2 left-0 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50 min-w-[160px]">
+          <div className="px-3 py-2 text-[10px] text-white/40">Adjust thinking level</div>
+          {levels.map(l => (
+            <button
+              key={l.id}
+              type="button"
+              onClick={() => {
+                onChange(l.id)
+                setIsOpen(false)
+              }}
+              className={clsx(
+                'w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors',
+                level === l.id ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5'
+              )}
+            >
+              <Brain size={14} />
+              <span className="mr-1">:</span>
+              <span>{l.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface MCPStatusProps {
+  connected: number
+  failed: number
+}
+
+const MCPStatus: React.FC<MCPStatusProps> = ({ connected, failed }) => {
+  const [isOpen, setIsOpen] = useState(false)
+  const hasIssues = failed > 0
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={clsx(
+          'p-2 rounded-lg transition-colors',
+          hasIssues ? 'text-yellow-500 hover:bg-yellow-500/10' : 'text-white/40 hover:text-white/60 hover:bg-white/5'
+        )}
+        title={`MCP servers: ${connected} connected${failed > 0 ? `, ${failed} failed` : ''}`}
+      >
+        <AlertTriangle size={16} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute bottom-full mb-2 right-0 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50 min-w-[200px] p-3">
+          <div className="text-xs font-semibold text-white mb-1">MCP Status</div>
+          <div className="text-[11px] text-white/50 mb-3">
+            {connected} connected{failed > 0 && <span className="text-yellow-500">, {failed} failed</span>}
+          </div>
+          <button
+            onClick={() => setIsOpen(false)}
+            className="text-[11px] text-blue-400 hover:text-blue-300"
+          >
+            Read the MCP docs →
+          </button>
         </div>
       )}
     </div>

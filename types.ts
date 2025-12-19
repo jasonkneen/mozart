@@ -56,6 +56,7 @@ export type Workspace = {
   repoPath?: string;
   workspacePath?: string;
   baseBranch?: string;
+  notes?: string;
 };
 
 export type FileNode = {
@@ -69,8 +70,12 @@ export type FileNode = {
 export type Tab = {
   id: string;
   title: string;
-  type: 'chat' | 'file';
+  type: 'chat' | 'file' | 'terminal' | 'notes' | 'diff';
   active?: boolean;
+  filePath?: string;
+  language?: string;
+  isDirty?: boolean;
+  diffPath?: string;
 };
 
 export type RepoProvider = 'github' | 'git' | 'local' | 'unknown';
@@ -157,4 +162,12 @@ export type PullRequest = {
   title: string;
   status: PullRequestStatus;
   url?: string;
+};
+
+export type CodeComment = {
+  id: string;
+  filePath: string;
+  line: number;
+  content: string;
+  createdAt: number;
 };

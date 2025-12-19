@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { X, FolderOpen, Link2 } from 'lucide-react';
+import { X, FolderOpen, Link2, Search } from 'lucide-react';
 import { gitService } from '../services/gitService';
+import FilePicker from './FilePicker';
 
 export type RepoModalMode = 'local' | 'url';
 
@@ -28,6 +29,7 @@ const RepoModal: React.FC<RepoModalProps> = ({ isOpen, mode, onClose, onCreate }
   const [baseBranch, setBaseBranch] = useState('');
   const [baseBranchError, setBaseBranchError] = useState('');
   const [isValidating, setIsValidating] = useState(false);
+  const [isFilePickerOpen, setIsFilePickerOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) return;
@@ -106,12 +108,22 @@ const RepoModal: React.FC<RepoModalProps> = ({ isOpen, mode, onClose, onCreate }
               <label className="text-[11px] font-semibold uppercase tracking-widest text-white/40">
                 Local repo path
               </label>
-              <input
-                value={repoPath}
-                onChange={(e) => setRepoPath(e.target.value)}
-                placeholder="/Users/you/code/my-repo"
-                className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white/80 placeholder:text-white/20 focus:border-white/20 outline-none"
-              />
+              <div className="flex gap-2">
+                <input
+                  value={repoPath}
+                  onChange={(e) => setRepoPath(e.target.value)}
+                  placeholder="/Users/you/code/my-repo"
+                  className="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white/80 placeholder:text-white/20 focus:border-white/20 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsFilePickerOpen(true)}
+                  className="px-3 py-2 rounded-lg border border-white/10 bg-black/40 text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+                  title="Browse..."
+                >
+                  <Search size={16} />
+                </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-2">
@@ -185,6 +197,17 @@ const RepoModal: React.FC<RepoModalProps> = ({ isOpen, mode, onClose, onCreate }
           </div>
         </form>
       </div>
+
+      <FilePicker
+        isOpen={isFilePickerOpen}
+        onClose={() => setIsFilePickerOpen(false)}
+        onSelect={(path) => {
+          setRepoPath(path);
+          setIsFilePickerOpen(false);
+        }}
+        mode="directory"
+        title="Select Repository Folder"
+      />
     </div>
   );
 };

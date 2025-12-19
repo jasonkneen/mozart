@@ -6,22 +6,31 @@ type StoreState = {
   activeWorkspaceId: string | null;
   tabs: Tab[];
   activeTabId: string;
+  messagesByTab: Record<string, Message[]>;
   messages: Record<string, Message[]>;
   diffsByWorkspace: Record<string, FileDiff[]>;
   fileTreeByWorkspace: Record<string, FileNode[]>;
   diffsLoadingByWorkspace: Record<string, boolean>;
+  configsByWorkspace: Record<string, any>;
 };
 
 type StoreActions = {
   setActiveWorkspace: (id: string | null) => void;
   setTabs: (tabs: Tab[]) => void;
   setActiveTab: (id: string) => void;
+  addTab: (tab: Tab) => void;
+  removeTab: (tabId: string) => void;
+  setTabDirty: (tabId: string, isDirty: boolean) => void;
   addWorkspace: (workspace: Workspace) => void;
   setWorkspaces: (workspaces: Workspace[]) => void;
   addMessage: (workspaceId: string, message: Message) => void;
+  addTabMessage: (tabId: string, message: Message) => void;
+  clearTabMessages: (tabId: string) => void;
   setWorkspaceDiffs: (workspaceId: string, diffs: FileDiff[]) => void;
   setWorkspaceFileTree: (workspaceId: string, fileTree: FileNode[]) => void;
   setWorkspaceDiffsLoading: (workspaceId: string, isLoading: boolean) => void;
+  updateWorkspaceNotes: (workspaceId: string, notes: string) => void;
+  setWorkspaceConfig: (workspaceId: string, config: any) => void;
 };
 
 type StoreContextValue = {
@@ -33,12 +42,19 @@ type StoreAction =
   | { type: 'set-active-workspace'; id: string | null }
   | { type: 'set-tabs'; tabs: Tab[] }
   | { type: 'set-active-tab'; id: string }
+  | { type: 'add-tab'; tab: Tab }
+  | { type: 'remove-tab'; tabId: string }
+  | { type: 'set-tab-dirty'; tabId: string; isDirty: boolean }
   | { type: 'add-workspace'; workspace: Workspace }
   | { type: 'set-workspaces'; workspaces: Workspace[] }
   | { type: 'add-message'; workspaceId: string; message: Message }
+  | { type: 'add-tab-message'; tabId: string; message: Message }
+  | { type: 'clear-tab-messages'; tabId: string }
   | { type: 'set-workspace-diffs'; workspaceId: string; diffs: FileDiff[] }
   | { type: 'set-workspace-file-tree'; workspaceId: string; fileTree: FileNode[] }
-  | { type: 'set-workspace-diffs-loading'; workspaceId: string; isLoading: boolean };
+  | { type: 'set-workspace-diffs-loading'; workspaceId: string; isLoading: boolean }
+  | { type: 'update-workspace-notes'; workspaceId: string; notes: string }
+  | { type: 'set-workspace-config'; workspaceId: string; config: any };
 
 const STORAGE_KEY = 'conductor.store.v2';
 
@@ -48,10 +64,12 @@ const createInitialState = (): StoreState => {
     activeWorkspaceId: null,
     tabs: [{ id: 't1', title: 'Claude', type: 'chat', active: true }],
     activeTabId: 't1',
+    messagesByTab: {},
     messages: {},
     diffsByWorkspace: {},
     fileTreeByWorkspace: {},
-    diffsLoadingByWorkspace: {}
+    diffsLoadingByWorkspace: {},
+    configsByWorkspace: {}
   };
 };
 
@@ -79,6 +97,10 @@ const mergeState = (loaded: Partial<StoreState> | null): StoreState => {
       ? loaded.diffsLoadingByWorkspace
       : defaultState.diffsLoadingByWorkspace;
 
+  const configsByWorkspace = loaded.configsByWorkspace && typeof loaded.configsByWorkspace === 'object'
+    ? loaded.configsByWorkspace
+    : defaultState.configsByWorkspace;
+
   const resolvedActiveWorkspaceId =
     loaded.activeWorkspaceId && workspaces.some((ws) => ws.id === loaded.activeWorkspaceId)
       ? loaded.activeWorkspaceId
@@ -89,15 +111,21 @@ const mergeState = (loaded: Partial<StoreState> | null): StoreState => {
       ? loaded.activeTabId
       : tabs[0]?.id ?? '';
 
+  const messagesByTab = loaded.messagesByTab && typeof loaded.messagesByTab === 'object'
+    ? loaded.messagesByTab
+    : defaultState.messagesByTab;
+
   return {
     workspaces,
     activeWorkspaceId: resolvedActiveWorkspaceId,
     tabs,
     activeTabId: resolvedActiveTabId,
+    messagesByTab,
     messages,
     diffsByWorkspace,
     fileTreeByWorkspace,
-    diffsLoadingByWorkspace
+    diffsLoadingByWorkspace,
+    configsByWorkspace
   };
 };
 
@@ -111,6 +139,43 @@ const reducer = (state: StoreState, action: StoreAction): StoreState => {
     }
     case 'set-active-tab': {
       return { ...state, activeTabId: action.id };
+    }
+    case 'add-tab': {
+      if (state.tabs.some((t) => t.id === action.tab.id)) return state;
+      return {
+        ...state,
+        tabs: [...state.tabs, action.tab],
+        activeTabId: action.tab.id,
+        messagesByTab: { ...state.messagesByTab, [action.tab.id]: [] }
+      };
+    }
+    case 'remove-tab': {
+      const remaining = state.tabs.filter((t) => t.id !== action.tabId);
+      if (remaining.length === 0) return state;
+      const newActiveId = state.activeTabId === action.tabId ? remaining[0].id : state.activeTabId;
+      const { [action.tabId]: _, ...restMessages } = state.messagesByTab;
+      return { ...state, tabs: remaining, activeTabId: newActiveId, messagesByTab: restMessages };
+    }
+    case 'set-tab-dirty': {
+      return {
+        ...state,
+        tabs: state.tabs.map((t) =>
+          t.id === action.tabId ? { ...t, isDirty: action.isDirty } : t
+        )
+      };
+    }
+    case 'add-tab-message': {
+      const existing = state.messagesByTab[action.tabId] || [];
+      return {
+        ...state,
+        messagesByTab: { ...state.messagesByTab, [action.tabId]: [...existing, action.message] }
+      };
+    }
+    case 'clear-tab-messages': {
+      return {
+        ...state,
+        messagesByTab: { ...state.messagesByTab, [action.tabId]: [] }
+      };
     }
     case 'set-workspaces': {
       const activeWorkspaceId =
@@ -167,6 +232,23 @@ const reducer = (state: StoreState, action: StoreAction): StoreState => {
         }
       };
     }
+    case 'update-workspace-notes': {
+      return {
+        ...state,
+        workspaces: state.workspaces.map((ws) =>
+          ws.id === action.workspaceId ? { ...ws, notes: action.notes } : ws
+        )
+      };
+    }
+    case 'set-workspace-config': {
+      return {
+        ...state,
+        configsByWorkspace: {
+          ...state.configsByWorkspace,
+          [action.workspaceId]: action.config
+        }
+      };
+    }
     default:
       return state;
   }
@@ -205,12 +287,21 @@ export const ConductorStoreProvider: React.FC<{ children: React.ReactNode }> = (
       addWorkspace: (workspace) => dispatch({ type: 'add-workspace', workspace }),
       setWorkspaces: (workspaces) => dispatch({ type: 'set-workspaces', workspaces }),
       addMessage: (workspaceId, message) => dispatch({ type: 'add-message', workspaceId, message }),
+      addTab: (tab) => dispatch({ type: 'add-tab', tab }),
+      removeTab: (tabId) => dispatch({ type: 'remove-tab', tabId }),
+      setTabDirty: (tabId, isDirty) => dispatch({ type: 'set-tab-dirty', tabId, isDirty }),
+      addTabMessage: (tabId, message) => dispatch({ type: 'add-tab-message', tabId, message }),
+      clearTabMessages: (tabId) => dispatch({ type: 'clear-tab-messages', tabId }),
       setWorkspaceDiffs: (workspaceId, diffs) =>
         dispatch({ type: 'set-workspace-diffs', workspaceId, diffs }),
       setWorkspaceFileTree: (workspaceId, fileTree) =>
         dispatch({ type: 'set-workspace-file-tree', workspaceId, fileTree }),
       setWorkspaceDiffsLoading: (workspaceId, isLoading) =>
-        dispatch({ type: 'set-workspace-diffs-loading', workspaceId, isLoading })
+        dispatch({ type: 'set-workspace-diffs-loading', workspaceId, isLoading }),
+      updateWorkspaceNotes: (workspaceId, notes) =>
+        dispatch({ type: 'update-workspace-notes', workspaceId, notes }),
+      setWorkspaceConfig: (workspaceId, config) =>
+        dispatch({ type: 'set-workspace-config', workspaceId, config })
     }),
     []
   );

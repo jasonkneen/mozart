@@ -62,6 +62,60 @@
       "name": "ai-task-1766151491369",
       "createdAt": 1766151491653,
       "baseBranch": "main"
+    },
+    "ws-1766159160278": {
+      "id": "ws-1766159160278",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766159160278-633",
+      "repoPath": "/Users/jkneen/Documents/GitHub/Agente",
+      "branch": "ai-task-1766159160278",
+      "name": "ai-task-1766159160278",
+      "createdAt": 1766159160812,
+      "baseBranch": "main"
+    },
+    "ws-1766160930198": {
+      "id": "ws-1766160930198",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766160930198-384",
+      "repoPath": "/Users/jkneen/ai/01",
+      "branch": "ai-task-1766160930198",
+      "name": "ai-task-1766160930198",
+      "createdAt": 1766160930667,
+      "baseBranch": "main"
+    },
+    "ws-1766181365086": {
+      "id": "ws-1766181365086",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766181365085-579",
+      "repoPath": "/Users/jkneen/Documents/GitHub/ai-radio",
+      "branch": "ai-task-1766181365085",
+      "name": "ai-task-1766181365085",
+      "createdAt": 1766181365133,
+      "baseBranch": "main"
+    },
+    "ws-1766181514161": {
+      "id": "ws-1766181514161",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766181514161-359",
+      "repoPath": "/Users/jkneen/Documents/GitHub/ai-radio",
+      "branch": "ai-task-1766181514161",
+      "name": "ai-task-1766181514161",
+      "createdAt": 1766181514197,
+      "baseBranch": "main"
+    },
+    "ws-1766194752151": {
+      "id": "ws-1766194752151",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766194752151-835",
+      "repoPath": "/Users/jkneen/Documents/GitHub/flows/ai",
+      "branch": "ai-task-1766194752151",
+      "name": "ai-task-1766194752151",
+      "createdAt": 1766194752347,
+      "baseBranch": "main"
+    },
+    "ws-1766220421759": {
+      "id": "ws-1766220421759",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766220421759-862",
+      "repoPath": "/Users/jkneen/A2A-Workspace/agent-messaging-system",
+      "branch": "ai-task-1766220421759",
+      "name": "ai-task-1766220421759",
+      "createdAt": 1766220421832,
+      "baseBranch": "main"
     }
   }
 }

@@ -29,6 +29,24 @@
             background: rgba(255, 255, 255, 0.05);
             border-left: 2px solid #3b82f6;
         }
+        @keyframes rotate-border {
+            0% { --border-angle: 0deg; }
+            100% { --border-angle: 360deg; }
+        }
+        @property --border-angle {
+            syntax: '<angle>';
+            initial-value: 0deg;
+            inherits: false;
+        }
+        .plan-mode-border {
+            --border-angle: 0deg;
+            border: 2px solid transparent !important;
+            border-radius: 1rem;
+            background: 
+                linear-gradient(#0A0A0A, #0A0A0A) padding-box,
+                conic-gradient(from var(--border-angle), #f87171 0%, transparent 10%, transparent 40%, #f87171 50%, transparent 60%, transparent 90%, #f87171 100%) border-box;
+            animation: rotate-border 4s linear infinite;
+        }
         ::-webkit-scrollbar {
             width: 6px;
             height: 6px;
