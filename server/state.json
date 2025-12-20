@@ -116,6 +116,15 @@
       "name": "ai-task-1766220421759",
       "createdAt": 1766220421832,
       "baseBranch": "main"
+    },
+    "ws-1766232930782": {
+      "id": "ws-1766232930782",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766232930782-976",
+      "repoPath": "/Users/jkneen/ai/OpenVoice",
+      "branch": "ai-task-1766232930782",
+      "name": "ai-task-1766232930782",
+      "createdAt": 1766232931042,
+      "baseBranch": "main"
     }
   }
 }

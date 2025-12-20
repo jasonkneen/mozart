@@ -1,69 +1,104 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Save, Copy, Check, RefreshCw, Undo, Plus } from 'lucide-react'
-import { CodeComment } from '../types'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Save, Copy, Check, RefreshCw, Undo } from 'lucide-react'
+import CodeMirror from '@uiw/react-codemirror'
+import { oneDark } from '@codemirror/theme-one-dark'
+import { javascript } from '@codemirror/lang-javascript'
+import { python } from '@codemirror/lang-python'
+import { html } from '@codemirror/lang-html'
+import { css } from '@codemirror/lang-css'
+import { json } from '@codemirror/lang-json'
+import { markdown } from '@codemirror/lang-markdown'
+import { sql } from '@codemirror/lang-sql'
+import { rust } from '@codemirror/lang-rust'
+import { cpp } from '@codemirror/lang-cpp'
+import { java } from '@codemirror/lang-java'
+import { php } from '@codemirror/lang-php'
+import { xml } from '@codemirror/lang-xml'
 
 interface FileEditorProps {
   filePath: string
   workspacePath?: string
+  language?: string
   onSave?: (content: string) => Promise<void>
   onDirtyChange?: (isDirty: boolean) => void
   onSaveComplete?: () => void
-  comments?: CodeComment[]
-  onAddComment?: (line: number, content: string) => void
-  onEditComment?: (id: string, content: string) => void
-  onDeleteComment?: (id: string) => void
 }
 
-function formatTime(timestamp: number): string {
-  const date = new Date(timestamp)
-  return date.toLocaleDateString('en-US', { 
-    month: 'short', 
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true 
-  })
+function getLanguageExtension(filename: string) {
+  const ext = filename.split('.').pop()?.toLowerCase()
+  switch (ext) {
+    case 'js':
+    case 'jsx':
+    case 'mjs':
+    case 'cjs':
+      return javascript({ jsx: true })
+    case 'ts':
+    case 'tsx':
+      return javascript({ jsx: true, typescript: true })
+    case 'py':
+    case 'pyw':
+      return python()
+    case 'html':
+    case 'htm':
+      return html()
+    case 'css':
+    case 'scss':
+    case 'less':
+      return css()
+    case 'json':
+      return json()
+    case 'md':
+    case 'mdx':
+    case 'markdown':
+      return markdown()
+    case 'sql':
+      return sql()
+    case 'rs':
+      return rust()
+    case 'c':
+    case 'cpp':
+    case 'cc':
+    case 'cxx':
+    case 'h':
+    case 'hpp':
+      return cpp()
+    case 'java':
+      return java()
+    case 'php':
+      return php()
+    case 'xml':
+    case 'svg':
+    case 'xhtml':
+      return xml()
+    default:
+      return javascript()
+  }
 }
 
 const FileEditor = ({
   filePath,
   workspacePath,
+  language,
   onSave,
   onDirtyChange,
   onSaveComplete,
-  comments = [],
-  onAddComment,
-  onEditComment,
-  onDeleteComment,
-}) => {
+}: FileEditorProps) => {
   const [content, setContent] = useState<string>('')
   const [originalContent, setOriginalContent] = useState<string>('')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  
-  const [commentingLine, setCommentingLine] = useState<number | null>(null)
-  const [commentInput, setCommentInput] = useState('')
-  const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
-  const [hoveredLine, setHoveredLine] = useState<number | null>(null)
+
+  const onDirtyChangeRef = useRef(onDirtyChange)
+  onDirtyChangeRef.current = onDirtyChange
 
   const fileName = filePath.split('/').pop() || filePath
   const isDirty = content !== originalContent
 
-  const commentsByLine = useMemo(() => {
-    const map = new Map<number, CodeComment[]>()
-    comments.forEach(c => {
-      const existing = map.get(c.line) || []
-      existing.push(c)
-      map.set(c.line, existing)
-    })
-    return map
-  }, [comments])
-
   useEffect(() => {
-    onDirtyChange?.(isDirty)
-  }, [isDirty, onDirtyChange])
+    onDirtyChangeRef.current?.(isDirty)
+  }, [isDirty])
 
   const getFullPath = useCallback(() => {
     const cleanPath = filePath.startsWith('/') ? filePath.slice(1) : filePath
@@ -156,48 +191,7 @@ const FileEditor = ({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleSave])
 
-  const handleAddComment = (line: number) => {
-    setCommentingLine(line)
-    setCommentInput('')
-    setEditingCommentId(null)
-  }
-
-  const handleEditComment = (comment: CodeComment) => {
-    setCommentingLine(comment.line)
-    setCommentInput(comment.content)
-    setEditingCommentId(comment.id)
-  }
-
-  const handleSubmitComment = () => {
-    if (!commentInput.trim()) return
-    
-    if (editingCommentId) {
-      onEditComment?.(editingCommentId, commentInput.trim())
-    } else if (commentingLine !== null) {
-      onAddComment?.(commentingLine, commentInput.trim())
-    }
-    
-    setCommentingLine(null)
-    setCommentInput('')
-    setEditingCommentId(null)
-  }
-
-  const handleCancelComment = () => {
-    setCommentingLine(null)
-    setCommentInput('')
-    setEditingCommentId(null)
-  }
-
-  const handleCommentKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault()
-      handleSubmitComment()
-    } else if (e.key === 'Escape') {
-      handleCancelComment()
-    }
-  }
-
-  const lines = content.split('\n')
+  const langExtension = getLanguageExtension(fileName)
 
   if (isLoading) {
     return (
@@ -224,7 +218,6 @@ const FileEditor = ({
 
   return (
     <div className="flex-1 flex flex-col bg-[#0A0A0A] min-h-0">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-white/[0.02]">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -278,125 +271,31 @@ const FileEditor = ({
         </div>
       </div>
 
-      {/* Editor with custom line rendering for comments */}
-      <div className="flex-1 min-h-0 overflow-hidden relative">
-        <div className="absolute inset-0 flex">
-          {/* Custom gutter with + buttons */}
-          <div className="w-16 bg-[#0A0A0A] border-r border-white/5 overflow-y-auto shrink-0 scrollbar-hide">
-            <div className="py-3">
-              {lines.map((_, idx) => {
-                const lineNum = idx + 1
-                const hasComment = commentsByLine.has(lineNum)
-                const isHovered = hoveredLine === lineNum
-                
-                return (
-                  <div
-                    key={lineNum}
-                    className="h-[21px] flex items-center justify-end pr-2 relative group"
-                    onMouseEnter={() => setHoveredLine(lineNum)}
-                    onMouseLeave={() => setHoveredLine(null)}
-                  >
-                    {(isHovered || hasComment) && onAddComment && (
-                      <button
-                        onClick={() => handleAddComment(lineNum)}
-                        className={`absolute left-1 p-0.5 rounded transition-all ${
-                          hasComment 
-                            ? 'text-blue-400 opacity-100' 
-                            : 'text-white/30 opacity-0 group-hover:opacity-100 hover:text-blue-400'
-                        }`}
-                        title="Add comment for AI"
-                      >
-                        <Plus size={12} />
-                      </button>
-                    )}
-                    <span className="text-[13px] text-white/20 font-mono select-none">
-                      {lineNum}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Code content with inline comments */}
-          <div className="flex-1 overflow-auto">
-            <div className="py-3">
-              {lines.map((line, idx) => {
-                const lineNum = idx + 1
-                const lineComments = commentsByLine.get(lineNum) || []
-                const isCommenting = commentingLine === lineNum
-                
-                return (
-                  <div key={lineNum}>
-                    {/* Code line */}
-                    <pre className="h-[21px] px-4 font-mono text-[13px] text-white/90 whitespace-pre overflow-x-auto">
-                      {line || ' '}
-                    </pre>
-                    
-                    {/* Comment input */}
-                    {isCommenting && (
-                      <div className="mx-4 my-2 bg-[#1a1a1a] border border-white/10 rounded-lg overflow-hidden">
-                        <textarea
-                          autoFocus
-                          value={commentInput}
-                          onChange={(e) => setCommentInput(e.target.value)}
-                          onKeyDown={handleCommentKeyDown}
-                          placeholder="Add a comment for the AI"
-                          className="w-full bg-transparent text-white/90 text-sm p-3 resize-none outline-none min-h-[80px]"
-                        />
-                        <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-white/5">
-                          <button
-                            onClick={handleCancelComment}
-                            className="px-3 py-1.5 text-xs text-white/60 hover:text-white transition-colors"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={handleSubmitComment}
-                            disabled={!commentInput.trim()}
-                            className="px-3 py-1.5 text-xs bg-white/10 hover:bg-white/20 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                          >
-                            {editingCommentId ? 'Save' : 'Add comment'} 
-                            <span className="text-white/40">⌘↵</span>
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Existing comments */}
-                    {!isCommenting && lineComments.map((comment) => (
-                      <div
-                        key={comment.id}
-                        className="mx-4 my-2 bg-[#1a1a1a] border border-white/10 rounded-lg p-3 group"
-                      >
-                        <p className="text-sm text-white/80 whitespace-pre-wrap">{comment.content}</p>
-                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
-                          <span className="text-[10px] text-white/30">
-                            {formatTime(comment.createdAt)}
-                          </span>
-                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => handleEditComment(comment)}
-                              className="text-[11px] text-white/40 hover:text-white transition-colors"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => onDeleteComment?.(comment.id)}
-                              className="text-[11px] text-red-400/60 hover:text-red-400 transition-colors"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <CodeMirror
+          value={content}
+          onChange={setContent}
+          theme={oneDark}
+          extensions={[langExtension]}
+          height="100%"
+          className="h-full text-[13px]"
+          basicSetup={{
+            lineNumbers: true,
+            highlightActiveLineGutter: true,
+            highlightActiveLine: true,
+            foldGutter: true,
+            dropCursor: true,
+            allowMultipleSelections: true,
+            indentOnInput: true,
+            bracketMatching: true,
+            closeBrackets: true,
+            autocompletion: true,
+            rectangularSelection: true,
+            crosshairCursor: false,
+            highlightSelectionMatches: true,
+            searchKeymap: true,
+          }}
+        />
       </div>
     </div>
   )
