@@ -21,6 +21,7 @@ type StoreActions = {
   addTab: (tab: Tab) => void;
   removeTab: (tabId: string) => void;
   setTabDirty: (tabId: string, isDirty: boolean) => void;
+  updateTab: (tabId: string, updates: Partial<Tab>) => void;
   addWorkspace: (workspace: Workspace) => void;
   setWorkspaces: (workspaces: Workspace[]) => void;
   addMessage: (workspaceId: string, message: Message) => void;
@@ -45,6 +46,7 @@ type StoreAction =
   | { type: 'add-tab'; tab: Tab }
   | { type: 'remove-tab'; tabId: string }
   | { type: 'set-tab-dirty'; tabId: string; isDirty: boolean }
+  | { type: 'update-tab'; tabId: string; updates: Partial<Tab> }
   | { type: 'add-workspace'; workspace: Workspace }
   | { type: 'set-workspaces'; workspaces: Workspace[] }
   | { type: 'add-message'; workspaceId: string; message: Message }
@@ -161,6 +163,14 @@ const reducer = (state: StoreState, action: StoreAction): StoreState => {
         ...state,
         tabs: state.tabs.map((t) =>
           t.id === action.tabId ? { ...t, isDirty: action.isDirty } : t
+        )
+      };
+    }
+    case 'update-tab': {
+      return {
+        ...state,
+        tabs: state.tabs.map((t) =>
+          t.id === action.tabId ? { ...t, ...action.updates } : t
         )
       };
     }
@@ -290,6 +300,7 @@ export const ConductorStoreProvider: React.FC<{ children: React.ReactNode }> = (
       addTab: (tab) => dispatch({ type: 'add-tab', tab }),
       removeTab: (tabId) => dispatch({ type: 'remove-tab', tabId }),
       setTabDirty: (tabId, isDirty) => dispatch({ type: 'set-tab-dirty', tabId, isDirty }),
+      updateTab: (tabId, updates) => dispatch({ type: 'update-tab', tabId, updates }),
       addTabMessage: (tabId, message) => dispatch({ type: 'add-tab-message', tabId, message }),
       clearTabMessages: (tabId) => dispatch({ type: 'clear-tab-messages', tabId }),
       setWorkspaceDiffs: (workspaceId, diffs) =>

@@ -1,10 +1,50 @@
-import React, { useState } from 'react';
-import { 
-  GitBranch, Edit3, Plus, ChevronDown, Check, Terminal, 
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  GitBranch, Edit3, Plus, ChevronDown, Check, Terminal,
   Code, Sparkles, Clock, Folder, Copy, FileText, X, FileCode, GitCompare,
-  ExternalLink, Loader2
+  ExternalLink, Loader2, Pin, PinOff, Bug, Lightbulb, Rocket, Zap, Heart,
+  Star, Coffee, Music, Flame, Moon, Sun, Cloud, Leaf
 } from 'lucide-react';
 import { Tab } from '../types';
+import { useTheme } from '../hooks/useTheme';
+
+// Available accent colors for tab customization
+const ACCENT_COLORS = [
+  { id: 'amber', color: '#f59e0b', label: 'Amber' },
+  { id: 'blue', color: '#3b82f6', label: 'Blue' },
+  { id: 'green', color: '#22c55e', label: 'Green' },
+  { id: 'purple', color: '#a855f7', label: 'Purple' },
+  { id: 'pink', color: '#ec4899', label: 'Pink' },
+  { id: 'red', color: '#ef4444', label: 'Red' },
+  { id: 'cyan', color: '#06b6d4', label: 'Cyan' },
+  { id: 'orange', color: '#f97316', label: 'Orange' },
+];
+
+// Available icons for tab customization
+const TAB_ICONS = [
+  { id: 'sparkles', Icon: Sparkles, label: 'Sparkles' },
+  { id: 'code', Icon: Code, label: 'Code' },
+  { id: 'file', Icon: FileText, label: 'File' },
+  { id: 'bug', Icon: Bug, label: 'Bug' },
+  { id: 'lightbulb', Icon: Lightbulb, label: 'Idea' },
+  { id: 'rocket', Icon: Rocket, label: 'Rocket' },
+  { id: 'zap', Icon: Zap, label: 'Zap' },
+  { id: 'heart', Icon: Heart, label: 'Heart' },
+  { id: 'star', Icon: Star, label: 'Star' },
+  { id: 'coffee', Icon: Coffee, label: 'Coffee' },
+  { id: 'music', Icon: Music, label: 'Music' },
+  { id: 'flame', Icon: Flame, label: 'Flame' },
+  { id: 'moon', Icon: Moon, label: 'Moon' },
+  { id: 'sun', Icon: Sun, label: 'Sun' },
+  { id: 'cloud', Icon: Cloud, label: 'Cloud' },
+  { id: 'leaf', Icon: Leaf, label: 'Leaf' },
+];
+
+// Get icon component by id
+function getTabIcon(iconId: string | undefined) {
+  const found = TAB_ICONS.find(i => i.id === iconId);
+  return found?.Icon || Sparkles;
+}
 
 interface PullRequestInfo {
   number: number;
@@ -21,6 +61,7 @@ interface TopBarProps {
   onTabSelect: (id: string) => void;
   onAddTab?: (type?: 'chat' | 'notes' | 'terminal') => void;
   onCloseTab?: (id: string) => void;
+  onUpdateTab?: (id: string, updates: Partial<Tab>) => void;
   onOpenInEditor?: (editor: string) => void;
   onRunScript?: (type: 'setup' | 'run' | 'archive') => void;
   config?: any;
@@ -30,16 +71,115 @@ interface TopBarProps {
   pullRequest?: PullRequestInfo;
 }
 
-const TopBar: React.FC<TopBarProps> = ({ 
-  branch, 
-  baseBranch: _baseBranch, 
-  tabs, 
-  activeTabId, 
-  onTabSelect, 
+// Tab customization popup component
+function TabCustomizePopup({
+  tab,
+  onUpdate,
+  onClose,
+  position,
+}: {
+  tab: Tab;
+  onUpdate: (updates: Partial<Tab>) => void;
+  onClose: () => void;
+  position: { x: number; y: number };
+}) {
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [onClose]);
+
+  const currentColor = tab.accentColor || '#f59e0b';
+  const currentIconId = tab.iconId || 'sparkles';
+
+  return (
+    <div
+      ref={popupRef}
+      className="fixed z-[100] p-3 rounded-xl shadow-2xl border animate-in fade-in zoom-in-95 duration-150 bg-elevated border-default"
+      style={{
+        left: position.x,
+        top: position.y,
+        minWidth: 220,
+        WebkitAppRegion: 'no-drag',
+      } as React.CSSProperties}
+    >
+      {/* Pin Toggle */}
+      <button
+        onClick={() => onUpdate({ isPinned: !tab.isPinned })}
+        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors mb-2 hover:bg-white/5"
+      >
+        {tab.isPinned ? (
+          <PinOff size={16} className="text-amber-500" />
+        ) : (
+          <Pin size={16} className="text-neutral-500" />
+        )}
+        <span className="text-sm text-white">
+          {tab.isPinned ? 'Unpin tab' : 'Pin tab'}
+        </span>
+        {tab.isPinned && (
+          <span className="ml-auto text-xs text-amber-500 font-medium">Pinned</span>
+        )}
+      </button>
+
+      {/* Color Selector */}
+      <div className="px-3 py-2 border-t border-white/5">
+        <div className="text-xs font-medium mb-2 text-white/40">Color</div>
+        <div className="flex items-center gap-1.5">
+          {ACCENT_COLORS.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => onUpdate({ accentColor: c.color })}
+              className={`w-6 h-6 rounded-full transition-transform hover:scale-110 ${
+                currentColor === c.color ? 'ring-2 ring-offset-2 ring-offset-[#1f1f1f]' : ''
+              }`}
+              style={{ backgroundColor: c.color, ringColor: c.color }}
+              title={c.label}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Icon Selector */}
+      <div className="px-3 py-2 border-t border-white/5">
+        <div className="text-xs font-medium mb-2 text-white/40">Icon</div>
+        <div className="grid grid-cols-8 gap-1">
+          {TAB_ICONS.map(({ id, Icon, label }) => (
+            <button
+              key={id}
+              onClick={() => onUpdate({ iconId: id })}
+              className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${
+                currentIconId === id
+                  ? 'bg-white/10 text-white'
+                  : 'text-neutral-500 hover:text-white hover:bg-white/5'
+              }`}
+              title={label}
+            >
+              <Icon size={14} />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const TopBar: React.FC<TopBarProps> = ({
+  branch,
+  baseBranch: _baseBranch,
+  tabs,
+  activeTabId,
+  onTabSelect,
   onAddTab,
-  onCloseTab, 
-  onOpenInEditor, 
-  config: _config, 
+  onCloseTab,
+  onUpdateTab,
+  onOpenInEditor,
+  config: _config,
   location,
   repoName,
   cost,
@@ -47,6 +187,29 @@ const TopBar: React.FC<TopBarProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [openInMenuOpen, setOpenInMenuOpen] = useState(false);
+  const [customizingTabId, setCustomizingTabId] = useState<string | null>(null);
+  const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
+  const { theme, toggleTheme } = useTheme();
+
+  // Sort chat tabs: pinned first
+  const chatTabs = tabs.filter(t => t.type === 'chat');
+  const sortedChatTabs = [...chatTabs].sort((a, b) => {
+    if (a.isPinned && !b.isPinned) return -1;
+    if (!a.isPinned && b.isPinned) return 1;
+    return 0;
+  });
+
+  const handleTabDoubleClick = (e: React.MouseEvent, tabId: string) => {
+    e.preventDefault();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setPopupPosition({
+      x: Math.min(rect.left, window.innerWidth - 240),
+      y: rect.bottom + 8,
+    });
+    setCustomizingTabId(tabId);
+  };
+
+  const customizingTab = tabs.find(t => t.id === customizingTabId);
 
   // Extract repo name from location path
   const displayRepoName = repoName || location.split('/').pop() || 'workspace';
@@ -99,11 +262,11 @@ const TopBar: React.FC<TopBarProps> = ({
   ];
 
   return (
-    <div className="flex flex-col border-b border-white/5 bg-[#0A0A0A]">
-      {/* Header row */}
-      <div className="h-9 flex items-center px-3 border-b border-white/5">
+    <div className="flex flex-col border-b border-subtle bg-surface">
+      {/* Header row - draggable */}
+      <div className="h-9 flex items-center px-3 border-b border-white/5" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
         {/* Left: Repo/Branch */}
-        <div className="flex items-center gap-1.5 text-white/60">
+        <div className="flex items-center gap-1.5 text-white/60" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <GitBranch size={12} className="text-white/40" />
           <span className="text-xs font-medium">{displayRepoName}/{branch}</span>
         </div>
@@ -111,7 +274,7 @@ const TopBar: React.FC<TopBarProps> = ({
         <div className="flex-1" />
 
         {/* Right: Path pill + Open dropdown + Cost + PR */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <div className="flex items-center bg-white/5 rounded-lg border border-white/10 overflow-hidden">
             <div className="flex items-center gap-1.5 px-2.5 py-1">
               <div className="w-3.5 h-3.5 bg-blue-500 rounded flex items-center justify-center">
@@ -135,7 +298,7 @@ const TopBar: React.FC<TopBarProps> = ({
                     className="fixed inset-0 z-40" 
                     onClick={() => setOpenInMenuOpen(false)} 
                   />
-                  <div className="absolute top-full right-0 mt-1 w-48 bg-[#1A1A1A] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 max-h-[400px] overflow-y-auto">
+                  <div className="absolute top-full right-0 mt-1 w-48 bg-elevated border border-default rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 max-h-[400px] overflow-y-auto">
                     {editors.map((editor) => (
                       <button
                         key={editor.id}
@@ -167,6 +330,19 @@ const TopBar: React.FC<TopBarProps> = ({
               )}
             </div>
           </div>
+
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          >
+            {theme === 'dark' ? (
+              <Sun size={14} className="text-amber-400" />
+            ) : (
+              <Moon size={14} className="text-blue-400" />
+            )}
+          </button>
 
           {cost !== undefined && (
             <div className="px-2.5 py-1 bg-white/5 rounded-lg border border-white/10">
@@ -208,10 +384,11 @@ const TopBar: React.FC<TopBarProps> = ({
         </div>
       </div>
 
-      {/* Tab bar - single line with flexible tab widths */}
-      <div className="h-9 flex items-center">
+      {/* Tab bar - single line with flexible tab widths, draggable background */}
+      <div className="h-9 flex items-center" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
         {/* Notes tab (fixed width) */}
         <button
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           onClick={() => {
             const notesTab = tabs.find(t => t.type === 'notes');
             if (notesTab) {
@@ -231,35 +408,72 @@ const TopBar: React.FC<TopBarProps> = ({
         </button>
 
         {/* Tabs container - grows to fill, tabs share space equally */}
-        <div className="flex-1 h-full flex items-center min-w-0 overflow-x-auto scrollbar-hide">
-          {/* Chat tabs */}
-          {tabs.filter(t => t.type === 'chat').map((tab) => (
-            <div
-              key={tab.id}
-              onClick={() => onTabSelect(tab.id)}
-              className={`group h-full flex items-center justify-center gap-2 px-3 text-xs font-medium transition-all border-b-2 cursor-pointer flex-1 min-w-[80px] max-w-[200px] ${
-                activeTabId === tab.id
-                  ? 'text-white border-amber-500'
-                  : 'text-white/40 border-transparent hover:text-white/60'
-              }`}
-            >
-              <Sparkles size={12} className="text-white/50 flex-shrink-0" />
-              <span className="truncate">{tab.title}</span>
-              {tabs.filter(t => t.type === 'chat').length > 1 && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCloseTab?.(tab.id);
-                  }}
-                  className={`flex-shrink-0 p-0.5 rounded transition-opacity ${
-                    activeTabId === tab.id ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
+        <div className="flex-1 h-full flex items-center min-w-0 overflow-x-auto scrollbar-hide" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          {/* Chat tabs - sorted with pinned first */}
+          {sortedChatTabs.map((tab) => {
+            const accentColor = tab.accentColor || '#f59e0b';
+            const TabIcon = getTabIcon(tab.iconId);
+            const isActive = activeTabId === tab.id;
+
+            // Pinned tabs are compact (icon only)
+            if (tab.isPinned) {
+              return (
+                <div
+                  key={tab.id}
+                  onClick={() => onTabSelect(tab.id)}
+                  onDoubleClick={(e) => handleTabDoubleClick(e, tab.id)}
+                  className={`group relative h-full flex items-center justify-center w-9 flex-shrink-0 border-b-2 cursor-pointer transition-all ${
+                    isActive
+                      ? 'text-white'
+                      : 'text-white/40 border-transparent hover:text-white/60'
                   }`}
+                  style={{ borderBottomColor: isActive ? accentColor : 'transparent' }}
+                  title={`${tab.title} (pinned) - Double-click to customize`}
                 >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-          ))}
+                  <TabIcon
+                    size={14}
+                    style={{ color: isActive ? accentColor : undefined }}
+                  />
+                </div>
+              );
+            }
+
+            // Regular tabs show full content
+            return (
+              <div
+                key={tab.id}
+                onClick={() => onTabSelect(tab.id)}
+                onDoubleClick={(e) => handleTabDoubleClick(e, tab.id)}
+                className={`group relative h-full flex items-center justify-center gap-2 px-3 text-xs font-medium transition-all border-b-2 cursor-pointer flex-1 min-w-[80px] max-w-[200px] ${
+                  isActive
+                    ? 'text-white'
+                    : 'text-white/40 border-transparent hover:text-white/60'
+                }`}
+                style={{ borderBottomColor: isActive ? accentColor : 'transparent' }}
+                title="Double-click to customize"
+              >
+                <TabIcon
+                  size={12}
+                  className="flex-shrink-0"
+                  style={{ color: isActive ? accentColor : undefined }}
+                />
+                <span className="truncate">{tab.title}</span>
+                {chatTabs.length > 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCloseTab?.(tab.id);
+                    }}
+                    className={`flex-shrink-0 p-0.5 rounded transition-opacity ${
+                      isActive ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
+                    }`}
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
 
           {/* File tabs */}
           {tabs.filter(t => t.type === 'file').map((tab) => (
@@ -323,6 +537,7 @@ const TopBar: React.FC<TopBarProps> = ({
         <button
           onClick={() => onAddTab?.('chat')}
           className="h-full flex items-center px-3 text-white/20 hover:text-white/40 transition-colors flex-shrink-0"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           title="New tab"
         >
           <Plus size={16} />
@@ -331,11 +546,22 @@ const TopBar: React.FC<TopBarProps> = ({
         {/* History button (fixed) */}
         <button
           className="h-full flex items-center px-3 text-white/30 hover:text-white/50 transition-colors flex-shrink-0"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           title="History"
         >
           <Clock size={16} />
         </button>
       </div>
+
+      {/* Tab Customization Popup */}
+      {customizingTabId && customizingTab && onUpdateTab && (
+        <TabCustomizePopup
+          tab={customizingTab}
+          onUpdate={(updates) => onUpdateTab(customizingTabId, updates)}
+          onClose={() => setCustomizingTabId(null)}
+          position={popupPosition}
+        />
+      )}
     </div>
   );
 };

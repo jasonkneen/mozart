@@ -76,6 +76,10 @@ export type Tab = {
   language?: string;
   isDirty?: boolean;
   diffPath?: string;
+  // Customization options (for chat tabs)
+  isPinned?: boolean;
+  accentColor?: string;
+  iconId?: string;
 };
 
 export type RepoProvider = 'github' | 'git' | 'local' | 'unknown';

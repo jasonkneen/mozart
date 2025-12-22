@@ -147,8 +147,8 @@ const VersionControl: React.FC<VersionControlProps> = ({
   };
 
   return (
-    <div 
-      className="h-full bg-[#0A0A0A] border-l border-white/5 flex flex-col shrink-0 relative"
+    <div
+      className="h-full bg-surface border-l border-subtle flex flex-col shrink-0 relative"
       style={{ width }}
     >
       <div
@@ -314,7 +314,7 @@ const VersionControl: React.FC<VersionControlProps> = ({
         </div>
 
         {/* Terminal/Run Drawer */}
-        <div className={`${isTerminalExpanded ? 'h-[300px]' : 'h-10'} border-t border-white/5 flex flex-col bg-[#050505] transition-all duration-200`}>
+        <div className={`${isTerminalExpanded ? 'h-[300px]' : 'h-10'} border-t border-subtle flex flex-col bg-base transition-all duration-200`}>
           <div className="h-10 px-2 flex items-center shrink-0">
             {/* Collapse/Expand chevron */}
             <button

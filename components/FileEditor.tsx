@@ -150,7 +150,7 @@ function ImageViewer({ blobUrl, fileName }: { blobUrl: string; fileName: string 
   const [zoom, setZoom] = useState(1)
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0a0a0a]">
+    <div className="flex-1 flex flex-col bg-surface">
       <div className="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-white/[0.02]">
         <button
           onClick={() => setZoom(z => Math.max(0.1, z - 0.25))}
@@ -322,7 +322,7 @@ function VideoPlayer({ blobUrl, fileName }: { blobUrl: string; fileName: string 
 // PDF Viewer Component
 function PDFViewer({ blobUrl }: { blobUrl: string }) {
   return (
-    <div className="flex-1 flex flex-col bg-[#525659]">
+    <div className="flex-1 flex flex-col bg-overlay">
       <embed
         src={blobUrl}
         type="application/pdf"
@@ -365,7 +365,7 @@ function DOCXViewer({ blobUrl, fileName }: { blobUrl: string; fileName: string }
 
   if (error) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-[#0a0a0a]">
+      <div className="flex-1 flex items-center justify-center bg-surface">
         <div className="text-red-400">{error}</div>
       </div>
     )
@@ -438,7 +438,7 @@ function MarkdownViewer({
       </div>
 
       {showPreview ? (
-        <div className="flex-1 overflow-auto bg-[#0f0f0f] p-8">
+        <div className="flex-1 overflow-auto bg-elevated p-8">
           <div className="max-w-3xl mx-auto prose prose-invert prose-sm">
             <ReactMarkdown>{content}</ReactMarkdown>
           </div>
@@ -625,7 +625,7 @@ const FileEditor = ({
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-[#0A0A0A]">
+      <div className="flex-1 flex items-center justify-center bg-surface">
         <div className="text-white/40 text-sm">Loading {fileName}...</div>
       </div>
     )
@@ -633,7 +633,7 @@ const FileEditor = ({
 
   if (error && !content && !blobUrl) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-[#0A0A0A] gap-4">
+      <div className="flex-1 flex flex-col items-center justify-center bg-surface gap-4">
         <div className="text-red-400 text-sm">{error}</div>
         <button
           onClick={handleReload}
@@ -694,7 +694,7 @@ const FileEditor = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0A0A0A] min-h-0">
+    <div className="flex-1 flex flex-col bg-surface min-h-0">
       <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-white/[0.02]">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">

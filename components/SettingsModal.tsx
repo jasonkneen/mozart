@@ -194,7 +194,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   ];
 
   return (
-    <div className="fixed inset-0 z-[100] bg-[#050505] flex animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[100] bg-[#0d0d0d] flex animate-in fade-in duration-200">
       {/* Settings Nav */}
       <div className="w-[280px] h-full border-r border-white/5 flex flex-col p-6 shrink-0">
         <h2 className="text-lg font-semibold text-white mb-6">Settings</h2>

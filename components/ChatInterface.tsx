@@ -395,7 +395,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#0A0A0A] relative overflow-hidden">
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-surface relative overflow-hidden">
       {/* Messages Container */}
       <div
         ref={scrollContainerRef}
@@ -763,7 +763,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ selectedModel, onModelCha
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full mb-2 left-0 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50 min-w-[200px]">
+        <div className="absolute bottom-full mb-2 left-0 bg-elevated border border-default rounded-lg shadow-xl overflow-hidden z-50 min-w-[200px]">
           {modelGroups.map((group, groupIdx) => (
             <div key={group.name}>
               <div className="px-3 py-2 text-[10px] font-semibold text-white/40 uppercase tracking-wider bg-white/[0.02]">
@@ -826,7 +826,7 @@ const ThinkingLevelSelector: React.FC<ThinkingLevelSelectorProps> = ({ level, on
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full mb-2 left-0 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50 min-w-[160px]">
+        <div className="absolute bottom-full mb-2 left-0 bg-elevated border border-default rounded-lg shadow-xl overflow-hidden z-50 min-w-[160px]">
           <div className="px-3 py-2 text-[10px] text-white/40">Adjust thinking level</div>
           {levels.map(l => (
             <button
@@ -876,7 +876,7 @@ const MCPStatus: React.FC<MCPStatusProps> = ({ connected, failed }) => {
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full mb-2 right-0 bg-[#1a1a1f] border border-white/10 rounded-lg shadow-xl overflow-hidden z-50 min-w-[200px] p-3">
+        <div className="absolute bottom-full mb-2 right-0 bg-elevated border border-default rounded-lg shadow-xl overflow-hidden z-50 min-w-[200px] p-3">
           <div className="text-xs font-semibold text-white mb-1">MCP Status</div>
           <div className="text-[11px] text-white/50 mb-3">
             {connected} connected{failed > 0 && <span className="text-yellow-500">, {failed} failed</span>}

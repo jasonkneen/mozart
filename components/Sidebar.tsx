@@ -78,9 +78,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <div 
-      className="h-full bg-[#0A0A0A] flex flex-col border-r border-white/5 shrink-0 text-[#E5E5E5] z-20 relative"
-      style={{ width }}
+    <div
+      className="h-full bg-surface flex flex-col border-r border-subtle shrink-0 z-20 relative"
+      style={{ width, color: 'var(--text-primary)' }}
     >
       <div
         onMouseDown={onResizeStart}
@@ -167,9 +167,9 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Notes / NEW Callout */}
-      <div 
+      <div
         onClick={onNotesClick}
-        className="mx-3 mb-3 bg-[#1A1A1A] border border-white/5 rounded-xl p-3 shadow-lg cursor-pointer hover:bg-[#222] transition-all group relative overflow-hidden"
+        className="mx-3 mb-3 bg-elevated border border-subtle rounded-xl p-3 shadow-lg cursor-pointer hover:bg-hover transition-all group relative overflow-hidden"
       >
         <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
            <X size={12} className="text-white/20 hover:text-white" onClick={(e) => { e.stopPropagation(); }} />
@@ -184,7 +184,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Sidebar Footer */}
-      <div className="mt-auto p-3 border-t border-white/5 bg-[#0A0A0A]">
+      <div className="mt-auto p-3 border-t border-subtle bg-surface">
         <div className="flex flex-col gap-1">
           <div className="relative">
              <button 
@@ -196,7 +196,7 @@ const Sidebar: React.FC<SidebarProps> = ({
              </button>
              
              {isAddMenuOpen && (
-              <div className="absolute bottom-full left-0 mb-2 w-full bg-[#1A1A1A] border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 z-50">
+              <div className="absolute bottom-full left-0 mb-2 w-full bg-elevated border border-default rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 z-50">
                 <button
                   onClick={() => handleOpenRepoModal('local')}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors"

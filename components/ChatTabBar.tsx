@@ -90,7 +90,7 @@ function TabCustomizePopup({
       ref={popupRef}
       className={`
         fixed z-[100] p-3 rounded-xl shadow-2xl border animate-in fade-in zoom-in-95 duration-150
-        ${isDarkMode ? 'bg-[#1a1a1a] border-white/10' : 'bg-white border-neutral-200'}
+        ${isDarkMode ? 'bg-[#1f1f1f] border-white/10' : 'bg-white border-neutral-200'}
       `}
       style={{
         left: position.x,
@@ -131,7 +131,7 @@ function TabCustomizePopup({
               onClick={() => onUpdate({ accentColor: c.color })}
               className={`
                 w-6 h-6 rounded-full transition-transform hover:scale-110
-                ${currentColor === c.color ? 'ring-2 ring-offset-2 ring-offset-[#1a1a1a]' : ''}
+                ${currentColor === c.color ? 'ring-2 ring-offset-2 ring-offset-[#1f1f1f]' : ''}
               `}
               style={{ backgroundColor: c.color, ringColor: c.color }}
               title={c.label}
@@ -208,7 +208,7 @@ export const ChatTabBar: React.FC<ChatTabBarProps> = ({
   return (
     <div className={`
       flex items-center w-full border-b select-none
-      ${isDarkMode ? 'border-neutral-800 bg-[#1e1e1e]' : 'border-neutral-200 bg-white'}
+      ${isDarkMode ? 'border-neutral-800 bg-[#242424]' : 'border-neutral-200 bg-white'}
     `}>
       <div className={`
         flex items-center justify-center h-9 w-10 border-r flex-shrink-0

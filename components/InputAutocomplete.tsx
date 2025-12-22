@@ -150,7 +150,7 @@ export function InputAutocomplete({
   return (
     <div
       ref={menuRef}
-      className="absolute bottom-full mb-2 left-4 right-4 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 z-50 max-h-64 overflow-y-auto"
+      className="absolute bottom-full mb-2 left-4 right-4 bg-elevated border border-default rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 z-50 max-h-64 overflow-y-auto"
     >
       <div className="p-2 text-xs text-white/40 border-b border-white/5">
         {trigger === '/' ? 'Commands' : 'Mentions'}

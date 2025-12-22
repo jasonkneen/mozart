@@ -7,7 +7,7 @@ interface NotesEditorProps {
 
 const NotesEditor: React.FC<NotesEditorProps> = ({ notes, onChange }) => {
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-[#0A0A0A]">
+    <div className="flex-1 flex flex-col min-h-0 bg-surface">
       <div className="flex-1 p-6">
         <textarea
           value={notes}

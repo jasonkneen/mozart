@@ -10,10 +10,47 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
+        /* Theme CSS Variables */
+        :root {
+            /* Dark theme (brighter) */
+            --bg-base: #181818;
+            --bg-surface: #1e1e1e;
+            --bg-elevated: #262626;
+            --bg-overlay: #2e2e2e;
+            --bg-hover: #353535;
+            --text-primary: #f5f5f5;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-tertiary: rgba(255, 255, 255, 0.5);
+            --text-muted: rgba(255, 255, 255, 0.3);
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-default: rgba(255, 255, 255, 0.12);
+            --glass-bg: rgba(30, 30, 30, 0.9);
+            --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+            --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
+        }
+
+        [data-theme="light"] {
+            /* Light theme */
+            --bg-base: #f8f9fa;
+            --bg-surface: #ffffff;
+            --bg-elevated: #f1f3f4;
+            --bg-overlay: #e8eaed;
+            --bg-hover: #dadce0;
+            --text-primary: #202124;
+            --text-secondary: rgba(0, 0, 0, 0.7);
+            --text-tertiary: rgba(0, 0, 0, 0.5);
+            --text-muted: rgba(0, 0, 0, 0.3);
+            --border-subtle: rgba(0, 0, 0, 0.06);
+            --border-default: rgba(0, 0, 0, 0.1);
+            --glass-bg: rgba(255, 255, 255, 0.9);
+            --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+            --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
+        }
+
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #050505;
-            color: #e5e5e5;
+            background-color: var(--bg-base);
+            color: var(--text-primary);
             margin: 0;
             overflow: hidden;
         }
@@ -21,12 +58,12 @@
             font-family: 'Geist Mono', monospace;
         }
         .glass {
-            background: rgba(13, 13, 13, 0.9);
+            background: var(--glass-bg);
             backdrop-filter: blur(40px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--border-default);
         }
         .sidebar-item-active {
-            background: rgba(255, 255, 255, 0.05);
+            background: var(--bg-hover);
             border-left: 2px solid #3b82f6;
         }
         @keyframes rotate-border {
@@ -43,7 +80,7 @@
             border: 2px solid transparent !important;
             border-radius: 1rem;
             background:
-                linear-gradient(#0A0A0A, #0A0A0A) padding-box,
+                linear-gradient(var(--bg-surface), var(--bg-surface)) padding-box,
                 conic-gradient(from var(--border-angle), #f87171 0%, transparent 10%, transparent 40%, #f87171 50%, transparent 60%, transparent 90%, #f87171 100%) border-box;
             animation: rotate-border 4s linear infinite;
         }
@@ -62,12 +99,57 @@
             background: transparent;
         }
         ::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--scrollbar-thumb);
             border-radius: 10px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.2);
+            background: var(--scrollbar-thumb-hover);
         }
+
+        /* Theme utility classes */
+        .bg-base { background-color: var(--bg-base); }
+        .bg-surface { background-color: var(--bg-surface); }
+        .bg-elevated { background-color: var(--bg-elevated); }
+        .bg-overlay { background-color: var(--bg-overlay); }
+        .bg-hover { background-color: var(--bg-hover); }
+        .text-primary { color: var(--text-primary); }
+        .text-secondary { color: var(--text-secondary); }
+        .text-tertiary { color: var(--text-tertiary); }
+        .text-muted { color: var(--text-muted); }
+        .border-subtle { border-color: var(--border-subtle); }
+        .border-default { border-color: var(--border-default); }
+
+        /* Light mode overrides for hardcoded white text */
+        [data-theme="light"] .text-white { color: #202124 !important; }
+        [data-theme="light"] .text-white\/90 { color: rgba(32, 33, 36, 0.9) !important; }
+        [data-theme="light"] .text-white\/80 { color: rgba(32, 33, 36, 0.8) !important; }
+        [data-theme="light"] .text-white\/70 { color: rgba(32, 33, 36, 0.7) !important; }
+        [data-theme="light"] .text-white\/60 { color: rgba(32, 33, 36, 0.6) !important; }
+        [data-theme="light"] .text-white\/50 { color: rgba(32, 33, 36, 0.5) !important; }
+        [data-theme="light"] .text-white\/40 { color: rgba(32, 33, 36, 0.4) !important; }
+        [data-theme="light"] .text-white\/30 { color: rgba(32, 33, 36, 0.3) !important; }
+        [data-theme="light"] .text-white\/20 { color: rgba(32, 33, 36, 0.2) !important; }
+        [data-theme="light"] .text-\[\#E5E5E5\] { color: #202124 !important; }
+
+        /* Light mode hover state overrides */
+        [data-theme="light"] .hover\:text-white:hover { color: #202124 !important; }
+        [data-theme="light"] .hover\:text-white\/60:hover { color: rgba(32, 33, 36, 0.6) !important; }
+        [data-theme="light"] .hover\:text-white\/50:hover { color: rgba(32, 33, 36, 0.5) !important; }
+        [data-theme="light"] .group-hover\:text-white:hover { color: #202124 !important; }
+
+        /* Light mode background overrides */
+        [data-theme="light"] .bg-white\/5 { background-color: rgba(0, 0, 0, 0.03) !important; }
+        [data-theme="light"] .bg-white\/10 { background-color: rgba(0, 0, 0, 0.06) !important; }
+        [data-theme="light"] .hover\:bg-white\/5:hover { background-color: rgba(0, 0, 0, 0.03) !important; }
+        [data-theme="light"] .hover\:bg-white\/10:hover { background-color: rgba(0, 0, 0, 0.06) !important; }
+
+        /* Light mode border overrides */
+        [data-theme="light"] .border-white\/5 { border-color: rgba(0, 0, 0, 0.06) !important; }
+        [data-theme="light"] .border-white\/10 { border-color: rgba(0, 0, 0, 0.1) !important; }
+        [data-theme="light"] .hover\:border-white\/10:hover { border-color: rgba(0, 0, 0, 0.1) !important; }
+
+        /* Light mode placeholder text */
+        [data-theme="light"] .placeholder\:text-white\/30::placeholder { color: rgba(32, 33, 36, 0.4) !important; }
     </style>
 </head>
 <body>

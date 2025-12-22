@@ -127,7 +127,7 @@ const ReviewPanel: React.FC<ReviewPanelProps> = ({
   const resolvedThreads = threads.filter(t => t.status === 'resolved');
 
   return (
-    <div className="flex flex-col h-full bg-[#0A0A0A]">
+    <div className="flex flex-col h-full bg-[#121212]">
       {/* Header */}
       <div className="px-4 py-3 border-b border-white/5">
         <div className="flex items-center justify-between mb-3">

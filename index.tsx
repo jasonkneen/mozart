@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { ConductorStoreProvider } from './services/store';
+import { ThemeProvider } from './hooks/useTheme';
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((registrations) => {
@@ -17,8 +18,10 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <ConductorStoreProvider>
-      <App />
-    </ConductorStoreProvider>
+    <ThemeProvider>
+      <ConductorStoreProvider>
+        <App />
+      </ConductorStoreProvider>
+    </ThemeProvider>
   </React.StrictMode>
 );

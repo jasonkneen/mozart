@@ -330,7 +330,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-full bg-[#050505] overflow-hidden text-[#E5E5E5] font-sans selection:bg-blue-500/30">
+    <div className="flex h-screen w-full bg-base overflow-hidden font-sans selection:bg-blue-500/30" style={{ color: 'var(--text-primary)' }}>
       {/* Sidebar toggle buttons - tracks left sidebar width */}
       <div
         className="fixed z-50 flex items-center gap-1 transition-[left] duration-150"
@@ -408,6 +408,7 @@ const App: React.FC = () => {
               onTabSelect={actions.setActiveTab}
               onAddTab={handleAddTab}
               onCloseTab={handleCloseTab}
+              onUpdateTab={actions.updateTab}
               onRunScript={handleRunScript}
               config={activeConfig}
               location={activeWorkspace?.location || ''}
@@ -481,40 +482,40 @@ const App: React.FC = () => {
           <div className="grid grid-cols-3 gap-4 w-full max-w-2xl px-8">
             <button
               onClick={() => handleOpenRepoModal('local')}
-              className="group flex flex-col items-start gap-3 p-6 bg-[#1A1A1A] hover:bg-[#222] border border-white/5 hover:border-white/10 rounded-xl transition-all hover:-translate-y-1 hover:shadow-xl text-left"
+              className="group flex flex-col items-start gap-3 p-6 bg-elevated hover:bg-hover border border-subtle hover:border-default rounded-xl transition-all hover:-translate-y-1 hover:shadow-xl text-left"
             >
               <div className="p-3 bg-blue-500/10 rounded-lg group-hover:bg-blue-500/20 transition-colors">
                 <FolderOpen size={24} className="text-blue-400" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white/80 mb-1 group-hover:text-white">Open project</h3>
-                <p className="text-xs text-white/40 leading-relaxed">Select a local repository to start orchestrating.</p>
+                <h3 className="text-sm font-bold text-secondary mb-1 group-hover:text-primary">Open project</h3>
+                <p className="text-xs text-muted leading-relaxed">Select a local repository to start orchestrating.</p>
               </div>
             </button>
 
             <button
               onClick={() => handleOpenRepoModal('url')}
-              className="group flex flex-col items-start gap-3 p-6 bg-[#1A1A1A] hover:bg-[#222] border border-white/5 hover:border-white/10 rounded-xl transition-all hover:-translate-y-1 hover:shadow-xl text-left"
+              className="group flex flex-col items-start gap-3 p-6 bg-elevated hover:bg-hover border border-subtle hover:border-default rounded-xl transition-all hover:-translate-y-1 hover:shadow-xl text-left"
             >
               <div className="p-3 bg-purple-500/10 rounded-lg group-hover:bg-purple-500/20 transition-colors">
                 <Globe size={24} className="text-purple-400" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white/80 mb-1 group-hover:text-white">Clone from URL</h3>
-                <p className="text-xs text-white/40 leading-relaxed">Clone a repository from GitHub or other remote.</p>
+                <h3 className="text-sm font-bold text-secondary mb-1 group-hover:text-primary">Clone from URL</h3>
+                <p className="text-xs text-muted leading-relaxed">Clone a repository from GitHub or other remote.</p>
               </div>
             </button>
 
             <button
               onClick={() => handleAddWorkspace()}
-              className="group flex flex-col items-start gap-3 p-6 bg-[#1A1A1A] hover:bg-[#222] border border-white/5 hover:border-white/10 rounded-xl transition-all hover:-translate-y-1 hover:shadow-xl text-left"
+              className="group flex flex-col items-start gap-3 p-6 bg-elevated hover:bg-hover border border-subtle hover:border-default rounded-xl transition-all hover:-translate-y-1 hover:shadow-xl text-left"
             >
               <div className="p-3 bg-green-500/10 rounded-lg group-hover:bg-green-500/20 transition-colors">
                 <FileText size={24} className="text-green-400" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white/80 mb-1 group-hover:text-white">Quick start</h3>
-                <p className="text-xs text-white/40 leading-relaxed">Spawn a new agent in a fresh workspace.</p>
+                <h3 className="text-sm font-bold text-secondary mb-1 group-hover:text-primary">Quick start</h3>
+                <p className="text-xs text-muted leading-relaxed">Spawn a new agent in a fresh workspace.</p>
               </div>
             </button>
           </div>
