@@ -82,6 +82,7 @@ import { useChat, UIMessage } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import clsx from 'clsx'
 import { useConductorStore } from '../services/store'
+import { InputAutocomplete, AutocompleteItem } from './InputAutocomplete'
 
 const API_BASE = (import.meta as any).env?.VITE_CONDUCTOR_API_BASE || '/api'
 
@@ -138,6 +139,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
   const [planMode, setPlanMode] = useState(false)
   const [inputFocused, setInputFocused] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [cursorPosition, setCursorPosition] = useState(0)
+  const [showAutocomplete, setShowAutocomplete] = useState(false)
   const [submitTime, setSubmitTime] = useState<number | null>(null)
   const [requestError, setRequestError] = useState<string | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -152,15 +155,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
     }
   }
 
+  // Transport needs to be recreated when planMode/model/level changes
+  const chatTransport = React.useMemo(() => new DefaultChatTransport({
+    api: `${API_BASE}/chat`,
+    body: {
+      model: selectedModel,
+      level: thinkingLevel === 'think' ? 'Think' : thinkingLevel === 'megathink' ? 'Megathink' : 'Ultrathink',
+      planMode,
+    },
+  }), [selectedModel, thinkingLevel, planMode])
+
   const { messages, sendMessage, status, setMessages } = useChat({
     id: tabId,
-    transport: new DefaultChatTransport({
-      api: `${API_BASE}/chat`,
-      body: {
-        model: selectedModel,
-        level: thinkingLevel === 'think' ? 'Think' : thinkingLevel === 'megathink' ? 'Megathink' : 'Ultrathink',
-      },
-    }),
+    transport: chatTransport,
     onFinish: ({ message }: { message: UIMessage }) => {
       const duration = submitTime ? Math.round((Date.now() - submitTime) / 1000) : undefined
       setIsSubmitting(false)
@@ -522,14 +529,47 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
             planMode ? "plan-mode-border" : "border-white/10 focus-within:border-white/20"
           )}
         >
+          {/* Autocomplete dropdown */}
+          <InputAutocomplete
+            input={input}
+            cursorPosition={cursorPosition}
+            onSelect={(item, startPos, endPos) => {
+              // Replace the trigger + query with the selected item
+              const before = input.slice(0, startPos)
+              const after = input.slice(endPos)
+              const insertion = item.type === 'command'
+                ? `/${item.label} `
+                : `@${item.label} `
+              const newInput = before + insertion + after
+              setInput(newInput)
+              // Move cursor after insertion
+              const newPos = startPos + insertion.length
+              setCursorPosition(newPos)
+              setTimeout(() => {
+                if (inputRef.current) {
+                  inputRef.current.selectionStart = newPos
+                  inputRef.current.selectionEnd = newPos
+                  inputRef.current.focus()
+                }
+              }, 0)
+            }}
+            isVisible={showAutocomplete}
+            onVisibilityChange={setShowAutocomplete}
+            inputRef={inputRef as React.RefObject<HTMLTextAreaElement>}
+          />
+
           <div className="flex items-start px-4 pt-2 gap-3">
             <textarea
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value)
+                setCursorPosition(e.target.selectionStart || 0)
+              }}
+              onSelect={(e) => setCursorPosition((e.target as HTMLTextAreaElement).selectionStart || 0)}
               onKeyDown={handleKeyDown}
               onFocus={() => setInputFocused(true)}
-              onBlur={() => setInputFocused(false)}
+              onBlur={() => setTimeout(() => setInputFocused(false), 100)}
               placeholder="Ask to make changes, @mention files, run /commands"
               className="flex-1 bg-transparent border-none outline-none resize-none text-[15px] text-white placeholder:text-white/20 min-h-[44px] max-h-[200px]"
               rows={1}

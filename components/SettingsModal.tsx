@@ -127,8 +127,6 @@ const Toggle: React.FC<{ enabled: boolean; onChange: (v: boolean) => void }> = (
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState('chat');
   const [settings, setSettings] = useState<Settings>(defaultSettings);
-  const [hasChanges, setHasChanges] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   // Load settings from localStorage
   useEffect(() => {
@@ -158,26 +156,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     key: keyof Settings[K],
     value: Settings[K][keyof Settings[K]]
   ) => {
-    setSettings(prev => ({
-      ...prev,
+    const newSettings = {
+      ...settings,
       [category]: {
-        ...prev[category],
+        ...settings[category],
         [key]: value
       }
-    }));
-    setHasChanges(true);
-  };
-
-  const saveSettings = async () => {
-    setSaveStatus('saving');
-    try {
-      localStorage.setItem('mozart-settings', JSON.stringify(settings));
-      setSaveStatus('saved');
-      setHasChanges(false);
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    } catch {
-      setSaveStatus('error');
-    }
+    };
+    setSettings(newSettings);
+    // Auto-save immediately
+    localStorage.setItem('mozart-settings', JSON.stringify(newSettings));
   };
 
   if (!isOpen) return null;
@@ -209,32 +197,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     <div className="fixed inset-0 z-[100] bg-[#050505] flex animate-in fade-in duration-200">
       {/* Settings Nav */}
       <div className="w-[280px] h-full border-r border-white/5 flex flex-col p-6 shrink-0">
-        <button
-          onClick={onClose}
-          className="flex items-center gap-2 text-sm text-white/40 hover:text-white transition-all mb-12 group"
-        >
-          <ChevronDown size={18} className="rotate-90 group-hover:-translate-x-1 transition-transform" />
-          Back to app <span className="text-[10px] bg-white/5 px-1.5 py-0.5 rounded ml-1 uppercase border border-white/5">Esc</span>
-        </button>
+        <h2 className="text-lg font-semibold text-white mb-6">Settings</h2>
 
         <div className="space-y-8 overflow-y-auto scrollbar-hide flex-1">
           {sections.map((section, idx) => (
             <div key={idx} className="space-y-4">
-              {section.title && <h3 className="text-[10px] font-bold text-white/20 uppercase tracking-widest ml-3">{section.title}</h3>}
+              {section.title && <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest ml-3">{section.title}</h3>}
               <div className="space-y-1">
                 {section.items.map(item => (
                   <button
                     key={item.id}
                     onClick={() => !item.external && setActiveTab(item.id)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
-                      activeTab === item.id ? 'bg-white/10 text-white shadow-lg' : 'text-white/40 hover:text-white/60'
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      activeTab === item.id ? 'bg-white/10 text-white shadow-lg' : 'text-white/50 hover:text-white/70'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       {item.icon}
                       {item.label}
                     </div>
-                    {item.external && <ExternalLink size={12} className="opacity-40" />}
+                    {item.external && <ExternalLink size={14} className="opacity-40" />}
                   </button>
                 ))}
               </div>
@@ -242,22 +224,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           ))}
         </div>
 
-        {/* Save Button */}
-        {hasChanges && (
-          <button
-            onClick={saveSettings}
-            disabled={saveStatus === 'saving'}
-            className="mt-4 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
-          >
-            {saveStatus === 'saving' ? (
-              <>Saving...</>
-            ) : saveStatus === 'saved' ? (
-              <><Check size={16} /> Saved</>
-            ) : (
-              <><Save size={16} /> Save Changes</>
-            )}
-          </button>
-        )}
+        {/* Back to App - at bottom */}
+        <button
+          onClick={onClose}
+          className="flex items-center gap-2 text-base text-white/50 hover:text-white transition-all mt-6 group"
+        >
+          <ChevronDown size={18} className="rotate-90 group-hover:-translate-x-1 transition-transform" />
+          Back to app
+          <span className="text-xs bg-white/10 px-2 py-1 rounded ml-auto uppercase border border-white/10">Esc</span>
+        </button>
       </div>
 
       {/* Settings Main Content */}
@@ -269,13 +244,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             <div className="space-y-6">
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Default Model</h3>
-                  <p className="text-xs text-white/40 mt-1">Model used for new conversations</p>
+                  <h3 className="text-base font-semibold text-white">Default Model</h3>
+                  <p className="text-sm text-white/50 mt-1">Model used for new conversations</p>
                 </div>
                 <select
                   value={settings.chat.defaultModel}
                   onChange={(e) => updateSettings('chat', 'defaultModel', e.target.value)}
-                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none w-48"
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-base text-white outline-none w-48"
                 >
                   <option value="haiku">Claude Haiku</option>
                   <option value="sonnet">Claude Sonnet</option>
@@ -285,8 +260,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Desktop Notifications</h3>
-                  <p className="text-xs text-white/40 mt-1">Alert when agents finish their work</p>
+                  <h3 className="text-base font-semibold text-white">Desktop Notifications</h3>
+                  <p className="text-sm text-white/50 mt-1">Alert when agents finish their work</p>
                 </div>
                 <Toggle
                   enabled={settings.chat.desktopNotifications}
@@ -296,8 +271,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Sound Effects</h3>
-                  <p className="text-xs text-white/40 mt-1">Play sounds for notifications</p>
+                  <h3 className="text-base font-semibold text-white">Sound Effects</h3>
+                  <p className="text-sm text-white/50 mt-1">Play sounds for notifications</p>
                 </div>
                 <Toggle
                   enabled={settings.chat.soundEnabled}
@@ -307,8 +282,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Show Thinking</h3>
-                  <p className="text-xs text-white/40 mt-1">Display Claude's reasoning process</p>
+                  <h3 className="text-base font-semibold text-white">Show Thinking</h3>
+                  <p className="text-sm text-white/50 mt-1">Display Claude's reasoning process</p>
                 </div>
                 <Toggle
                   enabled={settings.chat.showThinking}
@@ -318,8 +293,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
               <div className="flex items-center justify-between py-4">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Stream Responses</h3>
-                  <p className="text-xs text-white/40 mt-1">Show responses as they're generated</p>
+                  <h3 className="text-base font-semibold text-white">Stream Responses</h3>
+                  <p className="text-sm text-white/50 mt-1">Show responses as they're generated</p>
                 </div>
                 <Toggle
                   enabled={settings.chat.streamResponses}
@@ -337,13 +312,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             <div className="space-y-6">
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Theme</h3>
-                  <p className="text-xs text-white/40 mt-1">Toggle with ⌘⇧T</p>
+                  <h3 className="text-base font-semibold text-white">Theme</h3>
+                  <p className="text-sm text-white/50 mt-1">Toggle with ⌘⇧T</p>
                 </div>
                 <select
                   value={settings.appearance.theme}
                   onChange={(e) => updateSettings('appearance', 'theme', e.target.value as 'dark' | 'light' | 'system')}
-                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none w-48"
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-base text-white outline-none w-48"
                 >
                   <option value="dark">Dark</option>
                   <option value="light">Light (Coming Soon)</option>
@@ -353,13 +328,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Mono Font</h3>
-                  <p className="text-xs text-white/40 mt-1">Used for code and terminal</p>
+                  <h3 className="text-base font-semibold text-white">Mono Font</h3>
+                  <p className="text-sm text-white/50 mt-1">Used for code and terminal</p>
                 </div>
                 <select
                   value={settings.appearance.monoFont}
                   onChange={(e) => updateSettings('appearance', 'monoFont', e.target.value)}
-                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none w-48"
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-base text-white outline-none w-48"
                 >
                   <option value="Geist Mono">Geist Mono</option>
                   <option value="SF Mono">SF Mono</option>
@@ -371,8 +346,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Font Size</h3>
-                  <p className="text-xs text-white/40 mt-1">Editor and terminal font size</p>
+                  <h3 className="text-base font-semibold text-white">Font Size</h3>
+                  <p className="text-sm text-white/50 mt-1">Editor and terminal font size</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -383,12 +358,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                     onChange={(e) => updateSettings('appearance', 'fontSize', Number(e.target.value))}
                     className="w-32"
                   />
-                  <span className="text-sm text-white/60 w-8">{settings.appearance.fontSize}px</span>
+                  <span className="text-base text-white/60 w-12">{settings.appearance.fontSize}px</span>
                 </div>
               </div>
 
               <div className="py-4">
-                <h3 className="text-sm font-semibold text-white mb-4">Preview</h3>
+                <h3 className="text-base font-semibold text-white mb-4">Preview</h3>
                 <div
                   className="bg-[#0D0D0D] border border-white/5 rounded-xl p-6 leading-relaxed text-white/60 shadow-inner"
                   style={{ fontFamily: settings.appearance.monoFont, fontSize: settings.appearance.fontSize }}
@@ -409,21 +384,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             <div className="space-y-6">
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Default Branch</h3>
-                  <p className="text-xs text-white/40 mt-1">Branch used as base for new workspaces</p>
+                  <h3 className="text-base font-semibold text-white">Default Branch</h3>
+                  <p className="text-sm text-white/50 mt-1">Branch used as base for new workspaces</p>
                 </div>
                 <input
                   type="text"
                   value={settings.git.defaultBranch}
                   onChange={(e) => updateSettings('git', 'defaultBranch', e.target.value)}
-                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none w-48"
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-base text-white outline-none w-48"
                 />
               </div>
 
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Auto Stage Changes</h3>
-                  <p className="text-xs text-white/40 mt-1">Automatically stage files after edits</p>
+                  <h3 className="text-base font-semibold text-white">Auto Stage Changes</h3>
+                  <p className="text-sm text-white/50 mt-1">Automatically stage files after edits</p>
                 </div>
                 <Toggle
                   enabled={settings.git.autoStage}
@@ -433,8 +408,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Auto Commit</h3>
-                  <p className="text-xs text-white/40 mt-1">Create commits after agent tasks</p>
+                  <h3 className="text-base font-semibold text-white">Auto Commit</h3>
+                  <p className="text-sm text-white/50 mt-1">Create commits after agent tasks</p>
                 </div>
                 <Toggle
                   enabled={settings.git.autoCommit}
@@ -444,8 +419,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Sign Commits</h3>
-                  <p className="text-xs text-white/40 mt-1">GPG sign all commits</p>
+                  <h3 className="text-base font-semibold text-white">Sign Commits</h3>
+                  <p className="text-sm text-white/50 mt-1">GPG sign all commits</p>
                 </div>
                 <Toggle
                   enabled={settings.git.signCommits}
@@ -456,15 +431,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               {settings.git.signCommits && (
                 <div className="flex items-center justify-between py-4">
                   <div>
-                    <h3 className="text-sm font-semibold text-white">GPG Key ID</h3>
-                    <p className="text-xs text-white/40 mt-1">Key used for signing</p>
+                    <h3 className="text-base font-semibold text-white">GPG Key ID</h3>
+                    <p className="text-sm text-white/50 mt-1">Key used for signing</p>
                   </div>
                   <input
                     type="text"
                     value={settings.git.gpgKey}
                     onChange={(e) => updateSettings('git', 'gpgKey', e.target.value)}
                     placeholder="ABC123..."
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none w-48 placeholder:text-white/20"
+                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-base text-white outline-none w-48 placeholder:text-white/20"
                   />
                 </div>
               )}
@@ -477,44 +452,44 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           <div className="space-y-8 animate-in fade-in slide-in-from-right-4">
             <h1 className="text-2xl font-bold text-white">Environment Variables</h1>
             <div className="space-y-6">
-              <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-3 text-xs text-green-400">
-                <Check size={16} />
+              <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-3 text-sm text-green-400">
+                <Check size={18} />
                 Connected via Anthropic OAuth
               </div>
 
               <div className="space-y-4">
-                <h3 className="text-[10px] font-bold text-white/30 uppercase tracking-widest">API Keys</h3>
+                <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest">API Keys</h3>
 
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Anthropic API Key (optional)</label>
+                  <label className="text-sm text-white/60">Anthropic API Key (optional)</label>
                   <input
                     type="password"
                     value={settings.env.anthropicApiKey}
                     onChange={(e) => updateSettings('env', 'anthropicApiKey', e.target.value)}
                     placeholder="sk-ant-..."
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono outline-none placeholder:text-white/20"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-base text-white font-mono outline-none placeholder:text-white/20"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">OpenAI API Key (optional)</label>
+                  <label className="text-sm text-white/60">OpenAI API Key (optional)</label>
                   <input
                     type="password"
                     value={settings.env.openaiApiKey}
                     onChange={(e) => updateSettings('env', 'openaiApiKey', e.target.value)}
                     placeholder="sk-..."
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono outline-none placeholder:text-white/20"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-base text-white font-mono outline-none placeholder:text-white/20"
                   />
                 </div>
               </div>
 
               <div className="space-y-4 pt-4 border-t border-white/5">
-                <h3 className="text-[10px] font-bold text-white/30 uppercase tracking-widest">AWS Bedrock</h3>
+                <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest">AWS Bedrock</h3>
 
                 <div className="flex items-center justify-between py-2">
                   <div>
-                    <h3 className="text-sm font-semibold text-white">Use AWS Bedrock</h3>
-                    <p className="text-xs text-white/40 mt-1">Route requests through AWS</p>
+                    <h3 className="text-base font-semibold text-white">Use AWS Bedrock</h3>
+                    <p className="text-sm text-white/50 mt-1">Route requests through AWS</p>
                   </div>
                   <Toggle
                     enabled={settings.env.useBedrock}
@@ -524,11 +499,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
                 {settings.env.useBedrock && (
                   <div className="space-y-2">
-                    <label className="text-xs text-white/60">AWS Region</label>
+                    <label className="text-sm text-white/60">AWS Region</label>
                     <select
                       value={settings.env.awsRegion}
                       onChange={(e) => updateSettings('env', 'awsRegion', e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-base text-white outline-none"
                     >
                       <option value="us-east-1">us-east-1</option>
                       <option value="us-west-2">us-west-2</option>
@@ -549,13 +524,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             <div className="space-y-6">
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Max Tokens</h3>
-                  <p className="text-xs text-white/40 mt-1">Maximum response length</p>
+                  <h3 className="text-base font-semibold text-white">Max Tokens</h3>
+                  <p className="text-sm text-white/50 mt-1">Maximum response length</p>
                 </div>
                 <select
                   value={settings.claude.maxTokens}
                   onChange={(e) => updateSettings('claude', 'maxTokens', Number(e.target.value))}
-                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none w-48"
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-base text-white outline-none w-48"
                 >
                   <option value={4096}>4,096 tokens</option>
                   <option value={8192}>8,192 tokens</option>
@@ -566,8 +541,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Temperature</h3>
-                  <p className="text-xs text-white/40 mt-1">Response creativity (0 = focused, 1 = creative)</p>
+                  <h3 className="text-base font-semibold text-white">Temperature</h3>
+                  <p className="text-sm text-white/50 mt-1">Response creativity (0 = focused, 1 = creative)</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -579,14 +554,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                     onChange={(e) => updateSettings('claude', 'temperature', Number(e.target.value))}
                     className="w-32"
                   />
-                  <span className="text-sm text-white/60 w-8">{settings.claude.temperature}</span>
+                  <span className="text-base text-white/60 w-12">{settings.claude.temperature}</span>
                 </div>
               </div>
 
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Enable Tools</h3>
-                  <p className="text-xs text-white/40 mt-1">Allow Claude to use Bash, Edit, Read tools</p>
+                  <h3 className="text-base font-semibold text-white">Enable Tools</h3>
+                  <p className="text-sm text-white/50 mt-1">Allow Claude to use Bash, Edit, Read tools</p>
                 </div>
                 <Toggle
                   enabled={settings.claude.toolsEnabled}
@@ -596,13 +571,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
               <div className="flex items-center justify-between py-4">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Permission Mode</h3>
-                  <p className="text-xs text-white/40 mt-1">How to handle tool permissions</p>
+                  <h3 className="text-base font-semibold text-white">Permission Mode</h3>
+                  <p className="text-sm text-white/50 mt-1">How to handle tool permissions</p>
                 </div>
                 <select
                   value={settings.claude.permissionMode}
                   onChange={(e) => updateSettings('claude', 'permissionMode', e.target.value as 'ask' | 'auto' | 'deny')}
-                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none w-48"
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-base text-white outline-none w-48"
                 >
                   <option value="ask">Ask before executing</option>
                   <option value="auto">Auto-approve</option>
@@ -625,8 +600,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-white">Mozart User</h3>
-                    <p className="text-sm text-white/40">Connected via OAuth</p>
-                    <span className="inline-block mt-2 px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs font-medium rounded">
+                    <p className="text-sm text-white/50">Connected via OAuth</p>
+                    <span className="inline-block mt-2 px-2 py-1 bg-blue-500/20 text-blue-400 text-sm font-medium rounded">
                       Pro Plan
                     </span>
                   </div>
@@ -634,11 +609,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               </div>
 
               <div className="space-y-4">
-                <h3 className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Usage</h3>
+                <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest">Usage</h3>
                 <div className="p-4 bg-white/5 rounded-xl border border-white/10">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-white/60">API Calls This Month</span>
-                    <span className="text-sm text-white font-medium">12,345 / 100,000</span>
+                    <span className="text-base text-white/60">API Calls This Month</span>
+                    <span className="text-base text-white font-medium">12,345 / 100,000</span>
                   </div>
                   <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
                     <div className="h-full bg-blue-500 rounded-full" style={{ width: '12.3%' }} />
@@ -647,8 +622,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               </div>
 
               <div className="pt-4 border-t border-white/5">
-                <button className="flex items-center gap-2 px-4 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors">
-                  <LogOut size={16} />
+                <button className="flex items-center gap-2 px-4 py-2.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors text-base">
+                  <LogOut size={18} />
                   Sign Out
                 </button>
               </div>
@@ -661,15 +636,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           <div className="space-y-8 animate-in fade-in slide-in-from-right-4">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-white">Experimental</h1>
-              <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs font-medium rounded">Beta</span>
+              <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-sm font-medium rounded">Beta</span>
             </div>
-            <p className="text-sm text-white/40">These features are experimental and may change or be removed.</p>
+            <p className="text-base text-white/50">These features are experimental and may change or be removed.</p>
 
             <div className="space-y-6">
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Agent Mode</h3>
-                  <p className="text-xs text-white/40 mt-1">Enable autonomous multi-turn agent</p>
+                  <h3 className="text-base font-semibold text-white">Agent Mode</h3>
+                  <p className="text-sm text-white/50 mt-1">Enable autonomous multi-turn agent</p>
                 </div>
                 <Toggle
                   enabled={settings.experimental.enableAgentMode}
@@ -679,8 +654,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Parallel Tool Execution</h3>
-                  <p className="text-xs text-white/40 mt-1">Run multiple tools simultaneously</p>
+                  <h3 className="text-base font-semibold text-white">Parallel Tool Execution</h3>
+                  <p className="text-sm text-white/50 mt-1">Run multiple tools simultaneously</p>
                 </div>
                 <Toggle
                   enabled={settings.experimental.parallelTools}
@@ -690,8 +665,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Ultra Thinking</h3>
-                  <p className="text-xs text-white/40 mt-1">Extended reasoning with 128k budget</p>
+                  <h3 className="text-base font-semibold text-white">Ultra Thinking</h3>
+                  <p className="text-sm text-white/50 mt-1">Extended reasoning with 128k budget</p>
                 </div>
                 <Toggle
                   enabled={settings.experimental.ultraThinking}
@@ -701,8 +676,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
               <div className="flex items-center justify-between py-4">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">MCP Servers</h3>
-                  <p className="text-xs text-white/40 mt-1">Enable Model Context Protocol servers</p>
+                  <h3 className="text-base font-semibold text-white">MCP Servers</h3>
+                  <p className="text-sm text-white/50 mt-1">Enable Model Context Protocol servers</p>
                 </div>
                 <Toggle
                   enabled={settings.experimental.mcpServers}
@@ -731,8 +706,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 { keys: '⌘ ⇧ T', action: 'Toggle theme' },
               ].map((shortcut, idx) => (
                 <div key={idx} className="flex items-center justify-between py-3 border-b border-white/5">
-                  <span className="text-sm text-white/60">{shortcut.action}</span>
-                  <kbd className="px-2 py-1 bg-white/5 border border-white/10 rounded text-xs text-white/80 font-mono">
+                  <span className="text-base text-white/60">{shortcut.action}</span>
+                  <kbd className="px-3 py-1.5 bg-white/5 border border-white/10 rounded text-sm text-white/80 font-mono">
                     {shortcut.keys}
                   </kbd>
                 </div>

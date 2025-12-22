@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { Save, Copy, Check, RefreshCw, Undo } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
+import { Save, Copy, Check, RefreshCw, Undo, ZoomIn, ZoomOut, Eye, Code, Play, Pause, Volume2, VolumeX, Maximize, RotateCcw, WrapText } from 'lucide-react'
 import CodeMirror from '@uiw/react-codemirror'
+import { EditorView } from '@codemirror/view'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { javascript } from '@codemirror/lang-javascript'
 import { python } from '@codemirror/lang-python'
@@ -14,6 +15,34 @@ import { cpp } from '@codemirror/lang-cpp'
 import { java } from '@codemirror/lang-java'
 import { php } from '@codemirror/lang-php'
 import { xml } from '@codemirror/lang-xml'
+import ReactMarkdown from 'react-markdown'
+import { Canvas } from '@react-three/fiber'
+import { OrbitControls, useGLTF, Environment, Center } from '@react-three/drei'
+
+// Word wrap preferences storage per file extension
+const WORD_WRAP_STORAGE_KEY = 'mozart-word-wrap-prefs'
+
+function getWordWrapPrefs(): Record<string, boolean> {
+  try {
+    const stored = localStorage.getItem(WORD_WRAP_STORAGE_KEY)
+    return stored ? JSON.parse(stored) : {}
+  } catch {
+    return {}
+  }
+}
+
+function setWordWrapPref(ext: string, enabled: boolean): void {
+  const prefs = getWordWrapPrefs()
+  prefs[ext] = enabled
+  localStorage.setItem(WORD_WRAP_STORAGE_KEY, JSON.stringify(prefs))
+}
+
+function getWordWrapForExt(ext: string): boolean {
+  const prefs = getWordWrapPrefs()
+  // Default: wrap for markdown, prose files; no wrap for code
+  const defaultWrap = ['md', 'mdx', 'markdown', 'txt', 'json'].includes(ext)
+  return prefs[ext] ?? defaultWrap
+}
 
 interface FileEditorProps {
   filePath: string
@@ -22,6 +51,22 @@ interface FileEditorProps {
   onSave?: (content: string) => Promise<void>
   onDirtyChange?: (isDirty: boolean) => void
   onSaveComplete?: () => void
+}
+
+type FileType = 'code' | 'image' | 'audio' | 'video' | '3d' | 'pdf' | 'docx' | 'markdown'
+
+function getFileType(filename: string): FileType {
+  const ext = filename.split('.').pop()?.toLowerCase() || ''
+
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext)) return 'image'
+  if (['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'].includes(ext)) return 'audio'
+  if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'video'
+  if (['glb', 'gltf'].includes(ext)) return '3d'
+  if (ext === 'pdf') return 'pdf'
+  if (['docx', 'doc'].includes(ext)) return 'docx'
+  if (['md', 'mdx', 'markdown'].includes(ext)) return 'markdown'
+
+  return 'code'
 }
 
 function getLanguageExtension(filename: string) {
@@ -75,6 +120,351 @@ function getLanguageExtension(filename: string) {
   }
 }
 
+// 3D Model Viewer Component
+function Model({ url }: { url: string }) {
+  const { scene } = useGLTF(url)
+  return <primitive object={scene} />
+}
+
+function ThreeDViewer({ blobUrl }: { blobUrl: string }) {
+  return (
+    <div className="flex-1 bg-gradient-to-b from-[#1a1a2e] to-[#0a0a0f]">
+      <Canvas camera={{ position: [0, 0, 5], fov: 50 }}>
+        <ambientLight intensity={0.5} />
+        <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} />
+        <pointLight position={[-10, -10, -10]} />
+        <Suspense fallback={null}>
+          <Center>
+            <Model url={blobUrl} />
+          </Center>
+          <Environment preset="city" />
+        </Suspense>
+        <OrbitControls enablePan enableZoom enableRotate />
+      </Canvas>
+    </div>
+  )
+}
+
+// Image Viewer Component
+function ImageViewer({ blobUrl, fileName }: { blobUrl: string; fileName: string }) {
+  const [zoom, setZoom] = useState(1)
+
+  return (
+    <div className="flex-1 flex flex-col bg-[#0a0a0a]">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-white/[0.02]">
+        <button
+          onClick={() => setZoom(z => Math.max(0.1, z - 0.25))}
+          className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded"
+        >
+          <ZoomOut size={16} />
+        </button>
+        <span className="text-xs text-white/40 min-w-[50px] text-center">{Math.round(zoom * 100)}%</span>
+        <button
+          onClick={() => setZoom(z => Math.min(5, z + 0.25))}
+          className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded"
+        >
+          <ZoomIn size={16} />
+        </button>
+        <button
+          onClick={() => setZoom(1)}
+          className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded"
+        >
+          <RotateCcw size={16} />
+        </button>
+      </div>
+      <div className="flex-1 flex items-center justify-center overflow-auto p-8">
+        <img
+          src={blobUrl}
+          alt={fileName}
+          style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
+          className="max-w-full max-h-full object-contain transition-transform shadow-2xl rounded-lg"
+        />
+      </div>
+    </div>
+  )
+}
+
+// Audio Player Component
+function AudioPlayer({ blobUrl, fileName }: { blobUrl: string; fileName: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [isMuted, setIsMuted] = useState(false)
+
+  const togglePlay = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause()
+      } else {
+        audioRef.current.play()
+      }
+      setIsPlaying(!isPlaying)
+    }
+  }
+
+  const formatTime = (time: number) => {
+    const mins = Math.floor(time / 60)
+    const secs = Math.floor(time % 60)
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-b from-[#1a1a2e] to-[#0a0a0f] gap-8">
+      <div className="w-48 h-48 rounded-full bg-gradient-to-br from-blue-500/30 to-purple-500/30 flex items-center justify-center shadow-2xl border border-white/10">
+        <Volume2 size={64} className="text-white/40" />
+      </div>
+
+      <div className="text-center">
+        <h3 className="text-lg font-medium text-white/80">{fileName}</h3>
+        <p className="text-sm text-white/40 mt-1">{formatTime(currentTime)} / {formatTime(duration)}</p>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => setIsMuted(!isMuted)}
+          className="p-3 text-white/40 hover:text-white hover:bg-white/10 rounded-full"
+        >
+          {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+        </button>
+        <button
+          onClick={togglePlay}
+          className="p-4 bg-blue-500 hover:bg-blue-600 rounded-full text-white shadow-lg"
+        >
+          {isPlaying ? <Pause size={24} /> : <Play size={24} />}
+        </button>
+      </div>
+
+      <input
+        type="range"
+        min={0}
+        max={duration || 100}
+        value={currentTime}
+        onChange={(e) => {
+          if (audioRef.current) {
+            audioRef.current.currentTime = Number(e.target.value)
+          }
+        }}
+        className="w-80 accent-blue-500"
+      />
+
+      <audio
+        ref={audioRef}
+        src={blobUrl}
+        muted={isMuted}
+        onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
+        onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+        onEnded={() => setIsPlaying(false)}
+      />
+    </div>
+  )
+}
+
+// Video Player Component
+function VideoPlayer({ blobUrl, fileName }: { blobUrl: string; fileName: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  const togglePlay = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause()
+      } else {
+        videoRef.current.play()
+      }
+      setIsPlaying(!isPlaying)
+    }
+  }
+
+  const toggleFullscreen = () => {
+    if (videoRef.current) {
+      if (!isFullscreen) {
+        videoRef.current.requestFullscreen()
+      } else {
+        document.exitFullscreen()
+      }
+      setIsFullscreen(!isFullscreen)
+    }
+  }
+
+  return (
+    <div className="flex-1 flex flex-col bg-black">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-white/[0.02]">
+        <button
+          onClick={togglePlay}
+          className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded"
+        >
+          {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+        </button>
+        <span className="text-xs text-white/60 flex-1">{fileName}</span>
+        <button
+          onClick={toggleFullscreen}
+          className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded"
+        >
+          <Maximize size={16} />
+        </button>
+      </div>
+      <div className="flex-1 flex items-center justify-center">
+        <video
+          ref={videoRef}
+          src={blobUrl}
+          controls
+          className="max-w-full max-h-full"
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+        />
+      </div>
+    </div>
+  )
+}
+
+// PDF Viewer Component
+function PDFViewer({ blobUrl }: { blobUrl: string }) {
+  return (
+    <div className="flex-1 flex flex-col bg-[#525659]">
+      <embed
+        src={blobUrl}
+        type="application/pdf"
+        className="flex-1 w-full"
+      />
+    </div>
+  )
+}
+
+// DOCX Viewer Component
+function DOCXViewer({ blobUrl, fileName }: { blobUrl: string; fileName: string }) {
+  const [htmlContent, setHtmlContent] = useState<string>('')
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const loadDocx = async () => {
+      try {
+        const mammoth = await import('mammoth')
+        const response = await fetch(blobUrl)
+        const arrayBuffer = await response.arrayBuffer()
+        const result = await mammoth.convertToHtml({ arrayBuffer })
+        setHtmlContent(result.value)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load document')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    loadDocx()
+  }, [blobUrl])
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-white">
+        <div className="text-gray-500">Loading document...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-[#0a0a0a]">
+        <div className="text-red-400">{error}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 bg-white overflow-auto">
+      <div
+        className="max-w-3xl mx-auto p-8 prose prose-sm"
+        dangerouslySetInnerHTML={{ __html: htmlContent }}
+      />
+    </div>
+  )
+}
+
+// Markdown Viewer Component
+function MarkdownViewer({
+  content,
+  onChange,
+  isDirty,
+  onSave,
+  isSaving,
+  fileName
+}: {
+  content: string
+  onChange: (value: string) => void
+  isDirty: boolean
+  onSave: () => void
+  isSaving: boolean
+  fileName: string
+}) {
+  const [showPreview, setShowPreview] = useState(true)
+  const langExtension = getLanguageExtension(fileName)
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-white/[0.02]">
+        <button
+          onClick={() => setShowPreview(false)}
+          className={`px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors ${
+            !showPreview ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'
+          }`}
+        >
+          <Code size={14} />
+          Raw
+        </button>
+        <button
+          onClick={() => setShowPreview(true)}
+          className={`px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 transition-colors ${
+            showPreview ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'
+          }`}
+        >
+          <Eye size={14} />
+          Preview
+        </button>
+        <div className="flex-1" />
+        {isDirty && (
+          <span className="text-xs text-amber-500">Modified</span>
+        )}
+        <button
+          onClick={onSave}
+          disabled={!isDirty || isSaving}
+          className={`px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 ${
+            isDirty ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30' : 'text-white/20 cursor-not-allowed'
+          }`}
+        >
+          <Save size={14} />
+          Save
+        </button>
+      </div>
+
+      {showPreview ? (
+        <div className="flex-1 overflow-auto bg-[#0f0f0f] p-8">
+          <div className="max-w-3xl mx-auto prose prose-invert prose-sm">
+            <ReactMarkdown>{content}</ReactMarkdown>
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <CodeMirror
+            value={content}
+            onChange={onChange}
+            theme={oneDark}
+            extensions={[langExtension]}
+            height="100%"
+            className="h-full text-[13px]"
+            basicSetup={{
+              lineNumbers: true,
+              highlightActiveLineGutter: true,
+              highlightActiveLine: true,
+              foldGutter: true,
+            }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 const FileEditor = ({
   filePath,
   workspacePath,
@@ -85,6 +475,7 @@ const FileEditor = ({
 }: FileEditorProps) => {
   const [content, setContent] = useState<string>('')
   const [originalContent, setOriginalContent] = useState<string>('')
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -94,7 +485,20 @@ const FileEditor = ({
   onDirtyChangeRef.current = onDirtyChange
 
   const fileName = filePath.split('/').pop() || filePath
+  const fileType = getFileType(fileName)
+  const fileExt = fileName.split('.').pop()?.toLowerCase() || ''
   const isDirty = content !== originalContent
+
+  // Word wrap state - initialized from saved preferences per file type
+  const [wordWrap, setWordWrap] = useState(() => getWordWrapForExt(fileExt))
+
+  const toggleWordWrap = useCallback(() => {
+    setWordWrap(prev => {
+      const newValue = !prev
+      setWordWrapPref(fileExt, newValue)
+      return newValue
+    })
+  }, [fileExt])
 
   useEffect(() => {
     onDirtyChangeRef.current?.(isDirty)
@@ -105,12 +509,33 @@ const FileEditor = ({
     return workspacePath ? `${workspacePath}/${cleanPath}` : filePath
   }, [filePath, workspacePath])
 
+  // Load file based on type
   useEffect(() => {
     const loadFile = async () => {
       setIsLoading(true)
       setError(null)
+
+      const fullPath = getFullPath()
+
+      // For binary files, fetch as blob
+      if (['image', 'audio', 'video', '3d', 'pdf', 'docx'].includes(fileType)) {
+        try {
+          const response = await fetch(`/api/file/binary?path=${encodeURIComponent(fullPath)}`)
+          if (!response.ok) throw new Error('Failed to load file')
+          const blob = await response.blob()
+          const url = URL.createObjectURL(blob)
+          setBlobUrl(url)
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to load file')
+        } finally {
+          setIsLoading(false)
+        }
+        return
+      }
+
+      // For text files
       try {
-        const response = await fetch(`/api/file?path=${encodeURIComponent(getFullPath())}`)
+        const response = await fetch(`/api/file?path=${encodeURIComponent(fullPath)}`)
         if (!response.ok) throw new Error('Failed to load file')
         const data = await response.json()
         const fileContent = data.content || ''
@@ -123,7 +548,14 @@ const FileEditor = ({
       }
     }
     loadFile()
-  }, [getFullPath])
+
+    // Cleanup blob URL on unmount
+    return () => {
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl)
+      }
+    }
+  }, [getFullPath, fileType])
 
   const handleSave = useCallback(async () => {
     if (!isDirty) return
@@ -191,8 +623,6 @@ const FileEditor = ({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleSave])
 
-  const langExtension = getLanguageExtension(fileName)
-
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-[#0A0A0A]">
@@ -201,7 +631,7 @@ const FileEditor = ({
     )
   }
 
-  if (error && !content) {
+  if (error && !content && !blobUrl) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-[#0A0A0A] gap-4">
         <div className="text-red-400 text-sm">{error}</div>
@@ -214,6 +644,53 @@ const FileEditor = ({
         </button>
       </div>
     )
+  }
+
+  // Render based on file type
+  if (fileType === 'image' && blobUrl) {
+    return <ImageViewer blobUrl={blobUrl} fileName={fileName} />
+  }
+
+  if (fileType === 'audio' && blobUrl) {
+    return <AudioPlayer blobUrl={blobUrl} fileName={fileName} />
+  }
+
+  if (fileType === 'video' && blobUrl) {
+    return <VideoPlayer blobUrl={blobUrl} fileName={fileName} />
+  }
+
+  if (fileType === '3d' && blobUrl) {
+    return <ThreeDViewer blobUrl={blobUrl} />
+  }
+
+  if (fileType === 'pdf' && blobUrl) {
+    return <PDFViewer blobUrl={blobUrl} />
+  }
+
+  if (fileType === 'docx' && blobUrl) {
+    return <DOCXViewer blobUrl={blobUrl} fileName={fileName} />
+  }
+
+  if (fileType === 'markdown') {
+    return (
+      <MarkdownViewer
+        content={content}
+        onChange={setContent}
+        isDirty={isDirty}
+        onSave={handleSave}
+        isSaving={isSaving}
+        fileName={fileName}
+      />
+    )
+  }
+
+  // Default: Code editor
+  const langExtension = getLanguageExtension(fileName)
+
+  // Build extensions array with optional word wrap
+  const extensions = [langExtension]
+  if (wordWrap) {
+    extensions.push(EditorView.lineWrapping)
   }
 
   return (
@@ -232,6 +709,17 @@ const FileEditor = ({
           )}
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={toggleWordWrap}
+            className={`p-2 rounded transition-colors ${
+              wordWrap
+                ? 'text-blue-400 bg-blue-500/10'
+                : 'text-white/40 hover:text-white/60 hover:bg-white/5'
+            }`}
+            title={`Word wrap: ${wordWrap ? 'On' : 'Off'}`}
+          >
+            <WrapText size={14} />
+          </button>
           {isDirty && (
             <button
               onClick={handleRevert}
@@ -259,8 +747,8 @@ const FileEditor = ({
             onClick={handleSave}
             disabled={!isDirty || isSaving}
             className={`p-2 rounded transition-colors flex items-center gap-1 ${
-              isDirty 
-                ? 'text-blue-400 hover:bg-blue-500/10' 
+              isDirty
+                ? 'text-blue-400 hover:bg-blue-500/10'
                 : 'text-white/20 cursor-not-allowed'
             }`}
             title="Save (⌘S)"
@@ -273,10 +761,11 @@ const FileEditor = ({
 
       <div className="flex-1 min-h-0 overflow-hidden">
         <CodeMirror
+          key={`${filePath}-${wordWrap}`}
           value={content}
           onChange={setContent}
           theme={oneDark}
-          extensions={[langExtension]}
+          extensions={extensions}
           height="100%"
           className="h-full text-[13px]"
           basicSetup={{

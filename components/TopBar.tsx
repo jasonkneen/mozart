@@ -208,9 +208,9 @@ const TopBar: React.FC<TopBarProps> = ({
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div className="h-9 flex items-center px-2">
-        {/* Notes tab (first position) */}
+      {/* Tab bar - single line with flexible tab widths */}
+      <div className="h-9 flex items-center">
+        {/* Notes tab (fixed width) */}
         <button
           onClick={() => {
             const notesTab = tabs.find(t => t.type === 'notes');
@@ -220,7 +220,7 @@ const TopBar: React.FC<TopBarProps> = ({
               onAddTab?.('notes');
             }
           }}
-          className={`h-full flex items-center justify-center px-3 border-b-2 transition-all ${
+          className={`h-full flex items-center justify-center px-3 border-b-2 flex-shrink-0 transition-all ${
             tabs.find(t => t.type === 'notes' && t.id === activeTabId)
               ? 'border-amber-500 text-white'
               : 'border-transparent text-white/30 hover:text-white/50'
@@ -230,107 +230,107 @@ const TopBar: React.FC<TopBarProps> = ({
           <Edit3 size={14} />
         </button>
 
-        {/* Chat tabs */}
-        {tabs.filter(t => t.type === 'chat').map((tab) => (
-          <div
-            key={tab.id}
-            onClick={() => onTabSelect(tab.id)}
-            className={`group h-full flex items-center gap-2 px-3 text-xs font-medium transition-all border-b-2 cursor-pointer ${
-              activeTabId === tab.id 
-                ? 'text-white border-amber-500' 
-                : 'text-white/40 border-transparent hover:text-white/60'
-            }`}
-          >
-            <Sparkles size={12} className="text-white/50" />
-            {tab.title}
-            {tabs.filter(t => t.type === 'chat').length > 1 && (
+        {/* Tabs container - grows to fill, tabs share space equally */}
+        <div className="flex-1 h-full flex items-center min-w-0 overflow-x-auto scrollbar-hide">
+          {/* Chat tabs */}
+          {tabs.filter(t => t.type === 'chat').map((tab) => (
+            <div
+              key={tab.id}
+              onClick={() => onTabSelect(tab.id)}
+              className={`group h-full flex items-center justify-center gap-2 px-3 text-xs font-medium transition-all border-b-2 cursor-pointer flex-1 min-w-[80px] max-w-[200px] ${
+                activeTabId === tab.id
+                  ? 'text-white border-amber-500'
+                  : 'text-white/40 border-transparent hover:text-white/60'
+              }`}
+            >
+              <Sparkles size={12} className="text-white/50 flex-shrink-0" />
+              <span className="truncate">{tab.title}</span>
+              {tabs.filter(t => t.type === 'chat').length > 1 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCloseTab?.(tab.id);
+                  }}
+                  className={`flex-shrink-0 p-0.5 rounded transition-opacity ${
+                    activeTabId === tab.id ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
+                  }`}
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          ))}
+
+          {/* File tabs */}
+          {tabs.filter(t => t.type === 'file').map((tab) => (
+            <div
+              key={tab.id}
+              onClick={() => onTabSelect(tab.id)}
+              className={`group h-full flex items-center justify-center gap-2 px-3 text-xs font-medium transition-all border-b-2 cursor-pointer flex-1 min-w-[80px] max-w-[200px] ${
+                activeTabId === tab.id
+                  ? 'text-white border-blue-500'
+                  : 'text-white/40 border-transparent hover:text-white/60'
+              }`}
+            >
+              <FileCode size={12} className="text-blue-400/70 flex-shrink-0" />
+              <span className="flex items-center gap-1.5 min-w-0">
+                {tab.isDirty && <span className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />}
+                <span className="truncate">{tab.title}</span>
+              </span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onCloseTab?.(tab.id);
                 }}
-                className={`ml-1 p-0.5 rounded transition-opacity ${
+                className={`flex-shrink-0 p-0.5 rounded transition-opacity ${
                   activeTabId === tab.id ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
                 }`}
               >
                 <X size={12} />
               </button>
-            )}
-          </div>
-        ))}
+            </div>
+          ))}
 
-        {/* File tabs */}
-        {tabs.filter(t => t.type === 'file').map((tab) => (
-          <div
-            key={tab.id}
-            onClick={() => onTabSelect(tab.id)}
-            className={`group h-full flex items-center gap-2 px-3 text-xs font-medium transition-all border-b-2 cursor-pointer ${
-              activeTabId === tab.id 
-                ? 'text-white border-blue-500' 
-                : 'text-white/40 border-transparent hover:text-white/60'
-            }`}
-          >
-            <FileCode size={12} className="text-blue-400/70" />
-            <span className="flex items-center gap-1.5">
-              {tab.isDirty && <span className="w-2 h-2 rounded-full bg-amber-500" />}
-              {tab.title}
-            </span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onCloseTab?.(tab.id);
-              }}
-              className={`ml-1 p-0.5 rounded transition-opacity ${
-                activeTabId === tab.id ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
+          {/* Diff tabs */}
+          {tabs.filter(t => t.type === 'diff').map((tab) => (
+            <div
+              key={tab.id}
+              onClick={() => onTabSelect(tab.id)}
+              className={`group h-full flex items-center justify-center gap-2 px-3 text-xs font-medium transition-all border-b-2 cursor-pointer flex-1 min-w-[80px] max-w-[200px] ${
+                activeTabId === tab.id
+                  ? 'text-white border-green-500'
+                  : 'text-white/40 border-transparent hover:text-white/60'
               }`}
             >
-              <X size={12} />
-            </button>
-          </div>
-        ))}
+              <GitCompare size={12} className="text-green-400/70 flex-shrink-0" />
+              <span className="truncate">{tab.title}</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCloseTab?.(tab.id);
+                }}
+                className={`flex-shrink-0 p-0.5 rounded transition-opacity ${
+                  activeTabId === tab.id ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
+                }`}
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
 
-        {/* Diff tabs */}
-        {tabs.filter(t => t.type === 'diff').map((tab) => (
-          <div
-            key={tab.id}
-            onClick={() => onTabSelect(tab.id)}
-            className={`group h-full flex items-center gap-2 px-3 text-xs font-medium transition-all border-b-2 cursor-pointer ${
-              activeTabId === tab.id 
-                ? 'text-white border-green-500' 
-                : 'text-white/40 border-transparent hover:text-white/60'
-            }`}
-          >
-            <GitCompare size={12} className="text-green-400/70" />
-            {tab.title}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onCloseTab?.(tab.id);
-              }}
-              className={`ml-1 p-0.5 rounded transition-opacity ${
-                activeTabId === tab.id ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
-              }`}
-            >
-              <X size={12} />
-            </button>
-          </div>
-        ))}
-
-        {/* Add tab button */}
+        {/* Add tab button (fixed) */}
         <button
           onClick={() => onAddTab?.('chat')}
-          className="h-full flex items-center px-3 text-white/20 hover:text-white/40 transition-colors"
+          className="h-full flex items-center px-3 text-white/20 hover:text-white/40 transition-colors flex-shrink-0"
           title="New tab"
         >
           <Plus size={16} />
         </button>
 
-        {/* Right side spacer */}
-        <div className="flex-1" />
-
-        {/* History button */}
+        {/* History button (fixed) */}
         <button
-          className="h-full flex items-center px-3 text-white/30 hover:text-white/50 transition-colors"
+          className="h-full flex items-center px-3 text-white/30 hover:text-white/50 transition-colors flex-shrink-0"
           title="History"
         >
           <Clock size={16} />

@@ -331,18 +331,21 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen w-full bg-[#050505] overflow-hidden text-[#E5E5E5] font-sans selection:bg-blue-500/30">
-      {/* Sidebar toggle buttons - positioned after macOS traffic lights */}
-      <div className="fixed top-2 left-[76px] z-50 flex items-center gap-1">
+      {/* Sidebar toggle buttons - tracks left sidebar width */}
+      <div
+        className="fixed z-50 flex items-center gap-1 transition-[left] duration-150"
+        style={{ left: showLeftSidebar ? leftSidebarWidth - 58 : 12, top: 11 }}
+      >
         <button
           onClick={() => setShowLeftSidebar(!showLeftSidebar)}
-          className={`p-1.5 rounded transition-colors ${showLeftSidebar ? 'text-white/60 hover:text-white bg-white/5' : 'text-white/30 hover:text-white/50'}`}
+          className={`p-1.5 rounded transition-colors ${showLeftSidebar ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-white/30 hover:text-white/50'}`}
           title="Toggle left sidebar"
         >
           <PanelLeft size={16} />
         </button>
         <button
           onClick={() => setShowRightSidebar(!showRightSidebar)}
-          className={`p-1.5 rounded transition-colors ${showRightSidebar ? 'text-white/60 hover:text-white bg-white/5' : 'text-white/30 hover:text-white/50'}`}
+          className={`p-1.5 rounded transition-colors ${showRightSidebar ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-white/30 hover:text-white/50'}`}
           title="Toggle right sidebar"
         >
           <PanelRight size={16} />

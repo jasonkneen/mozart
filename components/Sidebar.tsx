@@ -87,46 +87,42 @@ const Sidebar: React.FC<SidebarProps> = ({
         className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500/50 transition-colors z-50 translate-x-0.5"
       />
 
-      {/* Sidebar Header */}
-      <div className="p-4 space-y-4">
+      {/* Sidebar Header - pt-10 to clear macOS traffic lights */}
+      <div className="p-4 pt-10 space-y-4">
         <div className="relative group">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-white/40 transition-colors" />
-          <input 
-            type="text" 
-            placeholder="Search..." 
+          <input
+            type="text"
+            placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-white/5 border border-white/5 outline-none rounded-lg pl-9 py-1.5 text-xs text-white placeholder:text-white/20 focus:border-white/20 focus:bg-white/10 transition-all"
+            className="w-full bg-white/5 border border-white/5 outline-none rounded-lg pl-9 py-1.5 text-sm text-white placeholder:text-white/20 focus:border-white/20 focus:bg-white/10 transition-all"
           />
         </div>
       </div>
 
       {/* Fleet Categories */}
       <div className="flex-1 overflow-y-auto px-2 space-y-6 scrollbar-hide">
-        {FLEET_CATEGORIES.map((fleet) => {
+        {FLEET_CATEGORIES.map((fleet, fleetIdx) => {
           const fleetWorkspaces = filteredWorkspaces(fleet.id);
-          if (fleetWorkspaces.length === 0) return null;
+          // Always show first fleet category, hide others if empty
+          if (fleetIdx > 0 && fleetWorkspaces.length === 0) return null;
 
           return (
             <div key={fleet.id} className="space-y-1">
               <div className="flex items-center justify-between px-2 mb-2 group">
-                <span className="text-[10px] font-bold text-white/30 uppercase tracking-[0.1em]">{fleet.label}</span>
-                <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/5 rounded transition-all">
-                  <MoreHorizontal size={14} className="text-white/20" />
-                </button>
+                <span className="text-xs font-bold text-white/40 uppercase tracking-wider">{fleet.label}</span>
+                {/* New workspace button - inline with header */}
+                {!searchQuery && fleetIdx === 0 && (
+                  <button
+                    onClick={() => onAddWorkspace()}
+                    className="flex items-center gap-1.5 px-2 py-1 text-white/40 hover:text-white text-xs font-medium rounded-lg hover:bg-white/10 transition-all"
+                  >
+                    <Plus size={14} />
+                    <span>New</span>
+                  </button>
+                )}
               </div>
-
-              {!searchQuery && (
-                <button
-                  onClick={() => onAddWorkspace()}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-white/30 hover:text-white/50 text-xs font-medium rounded-lg hover:bg-white/5 transition-all mb-1 group"
-                >
-                  <div className="w-5 h-5 flex items-center justify-center rounded bg-white/5 group-hover:bg-white/10 transition-colors">
-                    <Plus size={12} />
-                  </div>
-                  <span>New workspace</span>
-                </button>
-              )}
 
               <div className="space-y-0.5">
                 {fleetWorkspaces.map((ws, idx) => (

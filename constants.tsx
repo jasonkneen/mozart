@@ -3,9 +3,9 @@ import React from 'react';
 import { Terminal, ClipboardList, Palette } from 'lucide-react';
 
 export const FLEET_CATEGORIES = [
-  { id: 'Nanobrowser', icon: <Terminal size={14} />, label: 'nanobrowser' },
-  { id: 'Plans', icon: <ClipboardList size={14} />, label: 'plans' },
-  { id: 'Canvas', icon: <Palette size={14} />, label: 'canvas' },
+  { id: 'Nanobrowser', icon: <Terminal size={14} />, label: 'Workspaces' },
+  { id: 'Plans', icon: <ClipboardList size={14} />, label: 'Plans' },
+  { id: 'Canvas', icon: <Palette size={14} />, label: 'Canvas' },
 ];
 
 export const SYSTEM_INSTRUCTION = `You are Conductor, an elite local-first AI coding orchestrator.

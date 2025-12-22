@@ -386,6 +386,55 @@ const handleRequest = async (req, res) => {
     }
   }
 
+  // Binary file endpoint for images, audio, video, PDFs, etc.
+  if (parsed.pathname === '/api/file/binary' && method === 'GET') {
+    try {
+      const filePath = parsed.searchParams.get('path');
+      if (!filePath) return sendError(res, 400, 'path is required');
+
+      const content = await readFile(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+
+      // Determine MIME type
+      const mimeTypes = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.svg': 'image/svg+xml',
+        '.bmp': 'image/bmp',
+        '.ico': 'image/x-icon',
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav',
+        '.ogg': 'audio/ogg',
+        '.flac': 'audio/flac',
+        '.aac': 'audio/aac',
+        '.m4a': 'audio/mp4',
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.mov': 'video/quicktime',
+        '.avi': 'video/x-msvideo',
+        '.mkv': 'video/x-matroska',
+        '.glb': 'model/gltf-binary',
+        '.gltf': 'model/gltf+json',
+        '.pdf': 'application/pdf',
+        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        '.doc': 'application/msword',
+      };
+
+      const mimeType = mimeTypes[ext] || 'application/octet-stream';
+
+      res.writeHead(200, {
+        'Content-Type': mimeType,
+        'Content-Length': content.length,
+      });
+      return res.end(content);
+    } catch (error) {
+      return sendError(res, 404, 'File not found');
+    }
+  }
+
   if (parsed.pathname === '/api/file' && method === 'POST') {
     try {
       const body = await readJsonBody(req);
@@ -678,15 +727,45 @@ const handleRequest = async (req, res) => {
       // Convert UIMessages (from frontend) to ModelMessages (for AI SDK)
       const modelMessages = convertToModelMessages(body.messages);
 
-      // Build streamText options
-      const streamOptions = {
-        model: claudeCode(modelId),
-        maxTokens,
-        system: `You are Mozart, an elite local-first AI coding orchestrator.
+      // Determine system prompt based on planMode
+      const isPlanMode = body.planMode === true;
+
+      const normalSystemPrompt = `You are Mozart, an elite local-first AI coding orchestrator.
 You manage isolated git worktrees for parallel development.
 Be concise and direct. Use Markdown for formatting.
 When thinking through problems, show your reasoning.
-When proposing changes, be specific about files and line numbers.`,
+When proposing changes, be specific about files and line numbers.`;
+
+      const planModeSystemPrompt = `You are Mozart in PLANNING MODE. Your role is to help architect and plan implementations.
+
+IMPORTANT RESTRICTIONS IN PLAN MODE:
+- You can ONLY read, search, and view files - NO writing or editing allowed
+- You can use TodoWrite to create task lists and plans
+- Focus on understanding the codebase and creating detailed implementation plans
+- Analyze code structure, dependencies, and potential impacts
+- Create step-by-step task breakdowns using TodoWrite
+- Identify files that will need changes (but don't make changes yet)
+- Consider edge cases, error handling, and testing requirements
+
+When planning:
+1. First explore and understand the relevant code
+2. Create a clear plan with specific steps using TodoWrite
+3. List all files that will need modification
+4. Identify potential risks or blockers
+5. Suggest a testing strategy
+
+Be thorough in your analysis. A good plan now saves debugging later.`;
+
+      // Build streamText options
+      const streamOptions = {
+        model: claudeCode(modelId, {
+          // In plan mode, restrict to read-only tools
+          ...(isPlanMode && {
+            allowedTools: ['Read', 'Glob', 'Grep', 'LS', 'TodoWrite', 'WebSearch', 'WebFetch', 'Task']
+          })
+        }),
+        maxTokens,
+        system: isPlanMode ? planModeSystemPrompt : normalSystemPrompt,
         messages: modelMessages,
       };
 
