@@ -125,6 +125,15 @@
       "name": "ai-task-1766232930782",
       "createdAt": 1766232931042,
       "baseBranch": "main"
+    },
+    "ws-1766367465888": {
+      "id": "ws-1766367465888",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766367465888-756",
+      "repoPath": "/Users/jkneen/Documents/GitHub/flows/claude-flow",
+      "branch": "ai-task-1766367465888",
+      "name": "ai-task-1766367465888",
+      "createdAt": 1766367467302,
+      "baseBranch": "main"
     }
   }
 }
