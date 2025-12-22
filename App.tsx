@@ -9,11 +9,12 @@ import NotesEditor from './components/NotesEditor';
 import Terminal from './components/Terminal';
 import FileEditor from './components/FileEditor';
 import DiffViewer from './components/DiffViewer';
+import OAuthCodeModal from './components/OAuthCodeModal';
 import { AlertCircle, X, LogIn, LogOut, User, FolderOpen, Globe, FileText, PanelLeft, PanelRight } from 'lucide-react';
 import RepoModal, { RepoModalMode, RepoModalPayload } from './components/RepoModal';
 import { useConductorStore } from './services/store';
 import { gitService } from './services/gitService';
-import { oauthService } from './services/oauthService';
+import { oauthService, openOAuthWindow } from './services/oauthService';
 import { FileDiff, DiffHunk } from './types';
 
 type AuthStatus = {
@@ -39,6 +40,8 @@ const App: React.FC = () => {
   const [authStatus, setAuthStatus] = useState<AuthStatus>({ isLoggedIn: false, expiresIn: null });
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [showOAuthModal, setShowOAuthModal] = useState(false);
+  const [oauthAuthUrl, setOAuthAuthUrl] = useState<string | undefined>(undefined);
   const [isRepoModalOpen, setIsRepoModalOpen] = useState(false);
   const [repoModalMode, setRepoModalMode] = useState<RepoModalMode>('local');
   
@@ -164,21 +167,39 @@ const App: React.FC = () => {
   const handleLogin = async () => {
     setIsLoggingIn(true);
     try {
-      await oauthService.openLoginWindow();
-      // Poll for login completion
-      const success = await oauthService.waitForLogin();
-      if (success) {
-        const status = await oauthService.getStatus();
-        setAuthStatus({ isLoggedIn: status.isLoggedIn, expiresIn: status.expiresIn });
-      } else {
-        setError('Login timed out. Please try again.');
-      }
+      // Start login and get auth URL
+      const { authUrl } = await oauthService.startLogin();
+      setOAuthAuthUrl(authUrl);
+
+      // Open auth page in new window using shared utility
+      openOAuthWindow(authUrl);
+
+      // Show modal for code entry
+      setShowOAuthModal(true);
     } catch (err) {
       console.error('Login failed:', err);
       setError(err instanceof Error ? err.message : 'Login failed');
-    } finally {
       setIsLoggingIn(false);
     }
+  };
+
+  const handleOAuthCodeSubmit = async (code: string) => {
+    try {
+      await oauthService.completeLogin(code);
+      const status = await oauthService.getStatus();
+      setAuthStatus({ isLoggedIn: status.isLoggedIn, expiresIn: status.expiresIn });
+      setShowOAuthModal(false);
+    } finally {
+      setIsLoggingIn(false);
+      setOAuthAuthUrl(undefined);
+    }
+  };
+
+  const handleOAuthModalClose = () => {
+    setShowOAuthModal(false);
+    setIsLoggingIn(false);
+    setOAuthAuthUrl(undefined);
+    oauthService.clearPendingFlow();
   };
 
   const handleLogout = async () => {
@@ -351,7 +372,7 @@ const App: React.FC = () => {
             <h3 className="text-xl font-bold text-white/60">Connect to Claude</h3>
             <p className="text-sm max-w-xs mx-auto leading-relaxed text-white/40">
               {isLoggingIn
-                ? 'Complete authorization in the popup window...'
+                ? 'Authorize in the popup, then paste the code in the modal...'
                 : 'Login with your Anthropic account to start using Mozart AI Orchestrator.'}
             </p>
           </div>
@@ -502,6 +523,13 @@ const App: React.FC = () => {
         mode={repoModalMode}
         onClose={() => setIsRepoModalOpen(false)}
         onCreate={handleCreateRepoWorkspace}
+      />
+
+      <OAuthCodeModal
+        isOpen={showOAuthModal}
+        onClose={handleOAuthModalClose}
+        onSubmit={handleOAuthCodeSubmit}
+        authUrl={oauthAuthUrl}
       />
 
       {isSettingsOpen && <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />}

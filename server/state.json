@@ -134,6 +134,15 @@
       "name": "ai-task-1766367465888",
       "createdAt": 1766367467302,
       "baseBranch": "main"
+    },
+    "ws-1766441800037": {
+      "id": "ws-1766441800037",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766441800037-311",
+      "repoPath": "/Users/jkneen/Documents/GitHub/flows/Glbly",
+      "branch": "ai-task-1766441800037",
+      "name": "ai-task-1766441800037",
+      "createdAt": 1766441802254,
+      "baseBranch": "main"
     }
   }
 }

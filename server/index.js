@@ -575,10 +575,35 @@ const handleRequest = async (req, res) => {
   if (parsed.pathname === '/api/oauth/complete' && method === 'POST') {
     try {
       const body = await readJsonBody(req);
-      if (!body?.code || !body?.verifier || !body?.state || !body?.stateParam) {
-        return sendError(res, 400, 'Code, verifier, state, and stateParam are required');
+      if (!body?.code || !body?.verifier || !body?.state) {
+        return sendError(res, 400, 'Code, verifier, and state are required');
       }
+
+      // Security: Validate state against pending flows (CSRF protection)
+      const pendingFlow = pendingOAuthFlows.get(body.state);
+      if (!pendingFlow) {
+        return sendError(res, 400, 'Invalid or expired OAuth flow. Please start login again.');
+      }
+
+      // Verify the verifier matches what we stored
+      if (pendingFlow.verifier !== body.verifier) {
+        pendingOAuthFlows.delete(body.state);
+        return sendError(res, 400, 'Invalid PKCE verifier. Please start login again.');
+      }
+
+      // Check if flow has expired (10 minutes)
+      if (Date.now() - pendingFlow.createdAt > 10 * 60 * 1000) {
+        pendingOAuthFlows.delete(body.state);
+        await savePendingFlows(pendingOAuthFlows);
+        return sendError(res, 400, 'OAuth flow expired. Please start login again.');
+      }
+
       const result = await completeLogin(body.code, body.verifier, body.state);
+
+      // Always clean up the pending flow after attempt (one-time use)
+      pendingOAuthFlows.delete(body.state);
+      await savePendingFlows(pendingOAuthFlows);
+
       if (!result.success) {
         return sendError(res, 400, result.error);
       }
@@ -618,16 +643,32 @@ const handleRequest = async (req, res) => {
 
   if (parsed.pathname === '/api/chat' && method === 'POST') {
     try {
+      // Security: Verify user is authenticated before allowing chat
+      const authResult = await getAccessToken();
+      if (!authResult.success) {
+        return sendError(res, 401, 'Authentication required. Please login first.');
+      }
+
       const body = await readJsonBody(req);
-      console.log('Chat request received:', JSON.stringify(body, null, 2));
       if (!body?.messages) {
         return sendError(res, 400, 'messages is required');
       }
 
-      // Map thinking level to max_tokens
+      // Map thinking level to max_tokens and thinking budget
       let maxTokens = 4096;
-      if (body.level === 'Think') maxTokens = 8192;
-      if (body.level === 'Megathink') maxTokens = 16384;
+      let thinkingBudget = null;
+      if (body.level === 'Think') {
+        maxTokens = 8192;
+        thinkingBudget = 4096;
+      }
+      if (body.level === 'Megathink') {
+        maxTokens = 16384;
+        thinkingBudget = 8192;
+      }
+      if (body.level === 'Ultrathink') {
+        maxTokens = 32768;
+        thinkingBudget = 16384;
+      }
 
       // Select model - claudeCode uses its own model naming
       let modelId = 'sonnet';
@@ -637,19 +678,32 @@ const handleRequest = async (req, res) => {
       // Convert UIMessages (from frontend) to ModelMessages (for AI SDK)
       const modelMessages = convertToModelMessages(body.messages);
 
-      // Use Claude Code provider with streaming
-      const result = streamText({
+      // Build streamText options
+      const streamOptions = {
         model: claudeCode(modelId),
         maxTokens,
-        system: `You are Conductor, an elite local-first AI coding orchestrator.
-You manage isolated git worktrees.
-Always wrap tool calls in trace blocks.
-Available Trace Types: Thinking, Lint, Edit, Bash, Read, Plan.
-Format your response with a clear 'Summary' header.
-Use Markdown for rich text.
-When proposing a plan, use the 'Plan' trace type to describe steps.`,
+        system: `You are Mozart, an elite local-first AI coding orchestrator.
+You manage isolated git worktrees for parallel development.
+Be concise and direct. Use Markdown for formatting.
+When thinking through problems, show your reasoning.
+When proposing changes, be specific about files and line numbers.`,
         messages: modelMessages,
-      });
+      };
+
+      // Enable extended thinking if level is set
+      if (thinkingBudget) {
+        streamOptions.providerOptions = {
+          anthropic: {
+            thinking: {
+              type: 'enabled',
+              budgetTokens: thinkingBudget
+            }
+          }
+        };
+      }
+
+      // Use Claude Code provider with streaming
+      const result = streamText(streamOptions);
 
       result.pipeUIMessageStreamToResponse(res);
       return;

@@ -10,15 +10,42 @@ const BRAILLE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', 
 
 function BrailleSpinner() {
   const [frame, setFrame] = React.useState(0)
-  
+
   React.useEffect(() => {
     const interval = setInterval(() => {
       setFrame(f => (f + 1) % BRAILLE_FRAMES.length)
     }, 80)
     return () => clearInterval(interval)
   }, [])
-  
+
   return <span className="text-white/40 ml-1">{BRAILLE_FRAMES[frame]}</span>
+}
+
+// Streaming progress indicator with elapsed time
+function StreamingIndicator({ startTime, thinkingLevel }: { startTime: number | null; thinkingLevel: string }) {
+  const [elapsed, setElapsed] = React.useState(0)
+
+  React.useEffect(() => {
+    if (!startTime) return
+    const interval = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startTime) / 1000))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [startTime])
+
+  const thinkingLabels: Record<string, string> = {
+    think: 'Thinking',
+    megathink: 'Deep thinking',
+    ultrathink: 'Extended reasoning'
+  }
+
+  return (
+    <div className="flex items-center gap-3 text-white/40 text-sm animate-in fade-in">
+      <BrailleSpinner />
+      <span className="font-mono">{thinkingLabels[thinkingLevel] || 'Processing'}...</span>
+      <span className="text-xs font-mono text-white/25">{elapsed}s</span>
+    </div>
+  )
 }
 
 interface MessageFooterProps {
@@ -112,7 +139,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
   const [inputFocused, setInputFocused] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitTime, setSubmitTime] = useState<number | null>(null)
+  const [requestError, setRequestError] = useState<string | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Timeout duration based on thinking level (extended thinking needs more time)
+  const getTimeoutMs = () => {
+    switch (thinkingLevel) {
+      case 'ultrathink': return 5 * 60 * 1000  // 5 minutes
+      case 'megathink': return 3 * 60 * 1000   // 3 minutes
+      default: return 2 * 60 * 1000            // 2 minutes
+    }
+  }
 
   const { messages, sendMessage, status, setMessages } = useChat({
     id: tabId,
@@ -120,12 +158,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
       api: `${API_BASE}/chat`,
       body: {
         model: selectedModel,
+        level: thinkingLevel === 'think' ? 'Think' : thinkingLevel === 'megathink' ? 'Megathink' : 'Ultrathink',
       },
     }),
     onFinish: ({ message }: { message: UIMessage }) => {
       const duration = submitTime ? Math.round((Date.now() - submitTime) / 1000) : undefined
       setIsSubmitting(false)
       setSubmitTime(null)
+      // Clear abort controller on success
+      abortControllerRef.current = null
       setExtendedMessages(prev => {
         const updated = [...prev]
         const lastIdx = updated.findIndex(m => m.id === message.id)
@@ -146,6 +187,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
     },
     onError: (error) => {
       setIsSubmitting(false)
+      setSubmitTime(null)
+
+      // Handle different error types
+      if (error.name === 'AbortError' || error.message?.includes('abort')) {
+        setRequestError('Request timed out. Try a shorter message or lower thinking level.')
+      } else if (error.message?.includes('401') || error.message?.includes('Authentication')) {
+        setRequestError('Authentication required. Please login first.')
+      } else {
+        setRequestError(error.message || 'Failed to get response')
+      }
+
       console.error('Chat error:', error)
     },
   })
@@ -221,8 +273,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
   }, [extendedMessages, isLoading])
 
   useEffect(() => {
-    if (status === 'streaming') setIsSubmitting(false)
+    if (status === 'streaming') {
+      setIsSubmitting(false)
+      // Clear timeout when streaming starts - we got a response
+      abortControllerRef.current = null
+    }
   }, [status])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
+      }
+    }
+  }, [])
 
   // ⌘L to focus input, ⇧Tab to toggle plan mode
   useEffect(() => {
@@ -244,10 +310,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
     e.preventDefault()
     if (input.trim() && !isLoading && !isSubmitting) {
       let content = input.trim()
-      
+
       if (content === '/clear') {
         setMessages([])
         setInput('')
+        setRequestError(null)
         return
       }
 
@@ -255,34 +322,39 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
         content = content.replace('@notes', `\n\n<notes>\n${activeWorkspace.notes}\n</notes>`)
       }
 
+      // Clear any previous errors
+      setRequestError(null)
+
+      // Set up timeout for the request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      abortControllerRef.current = new AbortController()
+      const timeoutId = setTimeout(() => {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort()
+          setRequestError('Request timed out. Try a shorter message or lower thinking level.')
+          setIsSubmitting(false)
+          setSubmitTime(null)
+        }
+      }, getTimeoutMs())
+
       setIsSubmitting(true)
       setSubmitTime(Date.now())
       setInput('')
       sendMessage({ text: content })
+
+      // Clean up timeout when streaming starts or completes
+      const cleanup = () => clearTimeout(timeoutId)
+      setTimeout(cleanup, getTimeoutMs() + 1000)
     }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      if (input?.trim() && !isLoading && !isSubmitting) {
-        let content = input.trim()
-
-        if (content === '/clear') {
-          setMessages([])
-          setInput('')
-          return
-        }
-
-        if (content.includes('@notes') && activeWorkspace?.notes) {
-          content = content.replace('@notes', `\n\n<notes>\n${activeWorkspace.notes}\n</notes>`)
-        }
-
-        setIsSubmitting(true)
-        setSubmitTime(Date.now())
-        setInput('')
-        sendMessage({ text: content })
-      }
+      // Use same logic as form submit - create synthetic form event
+      handleFormSubmit({ preventDefault: () => {} } as React.FormEvent<HTMLFormElement>)
     }
   }
 
@@ -422,7 +494,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
         
 
         {(isSubmitting || isLoading) && !extendedMessages.some(m => m.isStreaming) && (
-          <BrailleSpinner />
+          <StreamingIndicator startTime={submitTime} thinkingLevel={thinkingLevel} />
+        )}
+
+        {requestError && (
+          <div className="flex items-center gap-3 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-300 text-sm animate-in fade-in">
+            <AlertTriangle size={16} className="shrink-0" />
+            <span>{requestError}</span>
+            <button
+              onClick={() => setRequestError(null)}
+              className="ml-auto text-red-400 hover:text-red-300 transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
         )}
 
         <div ref={messagesEndRef} />

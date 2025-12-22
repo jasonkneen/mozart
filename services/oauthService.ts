@@ -23,6 +23,9 @@ type ApiResponse<T> = {
   error?: string;
 };
 
+// Store pending OAuth flow for completing login in-app
+let pendingFlow: { verifier: string; state: string } | null = null;
+
 export const oauthService = {
   /**
    * Get current OAuth status
@@ -57,7 +60,48 @@ export const oauthService = {
     if (!result.success || !result.data) {
       throw new Error(result.error || 'Failed to start login');
     }
+    // Store the pending flow for later completion
+    pendingFlow = {
+      verifier: result.data.verifier,
+      state: result.data.state
+    };
     return result.data;
+  },
+
+  /**
+   * Complete OAuth login with the authorization code
+   * Call this after user authorizes and you have the code
+   */
+  async completeLogin(code: string): Promise<void> {
+    if (!pendingFlow) {
+      throw new Error('No pending OAuth flow. Call startLogin first.');
+    }
+    const response = await fetch(`${API_BASE}/oauth/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code,
+        verifier: pendingFlow.verifier,
+        state: pendingFlow.state
+      })
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to complete login');
+    }
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to complete login');
+    }
+    // Clear pending flow on success
+    pendingFlow = null;
+  },
+
+  /**
+   * Clear any pending OAuth flow
+   */
+  clearPendingFlow(): void {
+    pendingFlow = null;
   },
 
   /**
@@ -72,38 +116,23 @@ export const oauthService = {
       const error = await response.json().catch(() => ({}));
       throw new Error(error.error || 'Failed to logout');
     }
-  },
-
-  /**
-   * Open login window
-   * Opens Anthropic authorization page in a new window
-   */
-  async openLoginWindow(): Promise<void> {
-    const { authUrl } = await this.startLogin();
-    // Open in a new window for better UX
-    const width = 600;
-    const height = 700;
-    const left = (window.screen.width - width) / 2;
-    const top = (window.screen.height - height) / 2;
-    window.open(
-      authUrl,
-      'claude-oauth',
-      `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
-    );
-  },
-
-  /**
-   * Poll for login completion
-   * After opening login window, poll until user completes auth
-   */
-  async waitForLogin(maxAttempts = 60, intervalMs = 2000): Promise<boolean> {
-    for (let i = 0; i < maxAttempts; i++) {
-      await new Promise(resolve => setTimeout(resolve, intervalMs));
-      const status = await this.getStatus();
-      if (status.isLoggedIn) {
-        return true;
-      }
-    }
-    return false;
   }
 };
+
+// Utility for opening OAuth popup windows
+export const OAUTH_WINDOW_OPTIONS = {
+  width: 600,
+  height: 700,
+  features: 'toolbar=no,menubar=no,scrollbars=yes,resizable=yes'
+};
+
+export function openOAuthWindow(url: string): Window | null {
+  const { width, height, features } = OAUTH_WINDOW_OPTIONS;
+  const left = (window.screen.width - width) / 2;
+  const top = (window.screen.height - height) / 2;
+  return window.open(
+    url,
+    'claude-oauth',
+    `width=${width},height=${height},left=${left},top=${top},${features}`
+  );
+}

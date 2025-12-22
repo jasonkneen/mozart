@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "vite",
     "dev:server": "node server/index.js",
-    "dev:electron": "ELECTRON=true vite",
+    "dev:electron": "ELECTRON=true vite dev",
+    
     "build": "vite build",
     "build:electron": "ELECTRON=true vite build && electron-builder",
     "preview": "vite preview",
