@@ -6,7 +6,6 @@ import {
   Star, Coffee, Music, Flame, Moon, Sun, Cloud, Leaf
 } from 'lucide-react';
 import { Tab } from '../types';
-import { useTheme } from '../hooks/useTheme';
 
 // Available accent colors for tab customization
 const ACCENT_COLORS = [
@@ -189,8 +188,7 @@ const TopBar: React.FC<TopBarProps> = ({
   const [openInMenuOpen, setOpenInMenuOpen] = useState(false);
   const [customizingTabId, setCustomizingTabId] = useState<string | null>(null);
   const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
-  const { theme, toggleTheme } = useTheme();
-
+  
   // Sort chat tabs: pinned first
   const chatTabs = tabs.filter(t => t.type === 'chat');
   const sortedChatTabs = [...chatTabs].sort((a, b) => {
@@ -330,19 +328,6 @@ const TopBar: React.FC<TopBarProps> = ({
               )}
             </div>
           </div>
-
-          {/* Theme Toggle */}
-          <button
-            onClick={toggleTheme}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
-            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-          >
-            {theme === 'dark' ? (
-              <Sun size={14} className="text-amber-400" />
-            ) : (
-              <Moon size={14} className="text-blue-400" />
-            )}
-          </button>
 
           {cost !== undefined && (
             <div className="px-2.5 py-1 bg-white/5 rounded-lg border border-white/10">

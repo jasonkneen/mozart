@@ -4,7 +4,8 @@ import SyntaxHighlighter from 'react-syntax-highlighter'
 import { atelierSulphurpoolDark } from 'react-syntax-highlighter/dist/esm/styles/hljs'
 import {
   Send, Paperclip, Sparkles, ChevronDown, Brain, ChevronRight,
-  Copy, Check, Zap, ClipboardList, AlertTriangle, Link, ArrowUpRight
+  Copy, Check, Zap, ClipboardList, AlertTriangle, Link, ArrowUpRight, Shield, ShieldOff,
+  Reply, X
 } from 'lucide-react'
 const BRAILLE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
@@ -53,13 +54,22 @@ interface MessageFooterProps {
   content: string
   onCopy: () => void
   isCopied: boolean
+  timestamp?: number
+  onReply?: () => void
+  formatRelativeTime: (ts: number) => string
 }
 
-function MessageFooter({ duration, content, onCopy, isCopied }: MessageFooterProps) {
+function MessageFooter({ duration, content, onCopy, isCopied, timestamp, onReply, formatRelativeTime }: MessageFooterProps) {
   return (
     <div className="flex items-center gap-3 mt-3 text-white/30">
+      {timestamp && (
+        <span className="text-[11px]">{formatRelativeTime(timestamp)}</span>
+      )}
       {duration !== undefined && (
-        <span className="text-xs font-mono">{duration}s</span>
+        <>
+          <span className="text-white/10">·</span>
+          <span className="text-xs font-mono">{duration}s</span>
+        </>
       )}
       <span className="text-white/10">·</span>
       <button
@@ -69,6 +79,15 @@ function MessageFooter({ duration, content, onCopy, isCopied }: MessageFooterPro
       >
         {isCopied ? <Check size={14} /> : <Copy size={14} />}
       </button>
+      {onReply && (
+        <button
+          onClick={onReply}
+          className="p-1 hover:text-white/50 transition-colors"
+          title="Reply"
+        >
+          <Reply size={14} />
+        </button>
+      )}
       <button
         className="p-1 hover:text-white/50 transition-colors"
         title="Fork conversation"
@@ -83,6 +102,8 @@ import { DefaultChatTransport } from 'ai'
 import clsx from 'clsx'
 import { useConductorStore } from '../services/store'
 import { InputAutocomplete, AutocompleteItem } from './InputAutocomplete'
+import { ToolApprovalCard } from './ToolApprovalCard'
+import { useToolApproval } from '../hooks/useToolApproval'
 
 const API_BASE = (import.meta as any).env?.VITE_CONDUCTOR_API_BASE || '/api'
 
@@ -116,6 +137,8 @@ interface ExtendedMessage {
   isStreaming?: boolean
   startTime?: number
   duration?: number
+  timestamp?: number
+  replyToId?: string
 }
 
 interface ChatInterfaceProps {
@@ -137,14 +160,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
   const [input, setInput] = useState('')
   const [thinkingLevel, setThinkingLevel] = useState<'think' | 'megathink' | 'ultrathink'>('think')
   const [planMode, setPlanMode] = useState(false)
+  const [toolApprovalEnabled, setToolApprovalEnabled] = useState(false) // AI SDK 6.0 human-in-the-loop (disabled by default)
   const [inputFocused, setInputFocused] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [cursorPosition, setCursorPosition] = useState(0)
   const [showAutocomplete, setShowAutocomplete] = useState(false)
   const [submitTime, setSubmitTime] = useState<number | null>(null)
   const [requestError, setRequestError] = useState<string | null>(null)
+  const [replyingTo, setReplyingTo] = useState<{ id: string; content: string; role: string } | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Format relative time
+  const formatRelativeTime = (timestamp: number) => {
+    const now = Date.now()
+    const diff = now - timestamp
+    const seconds = Math.floor(diff / 1000)
+    const minutes = Math.floor(seconds / 60)
+    const hours = Math.floor(minutes / 60)
+    const days = Math.floor(hours / 24)
+
+    if (seconds < 60) return 'just now'
+    if (minutes < 60) return `${minutes}m ago`
+    if (hours < 24) return `${hours}h ago`
+    if (days < 7) return `${days}d ago`
+    return new Date(timestamp).toLocaleDateString()
+  }
+
+  // Tool approval hook (AI SDK 6.0)
+  const {
+    pendingApprovals,
+    isConnected: isToolApprovalConnected,
+    approve: approveToolCall,
+    reject: rejectToolCall,
+  } = useToolApproval({
+    enabled: toolApprovalEnabled,
+    onApprovalRequest: (request) => {
+      console.log('Tool approval requested:', request.toolName);
+    },
+  });
 
   // Timeout duration based on thinking level (extended thinking needs more time)
   const getTimeoutMs = () => {
@@ -155,15 +209,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
     }
   }
 
-  // Transport needs to be recreated when planMode/model/level changes
+  // Transport needs to be recreated when planMode/model/level/toolApproval changes
   const chatTransport = React.useMemo(() => new DefaultChatTransport({
     api: `${API_BASE}/chat`,
     body: {
       model: selectedModel,
       level: thinkingLevel === 'think' ? 'Think' : thinkingLevel === 'megathink' ? 'Megathink' : 'Ultrathink',
       planMode,
+      toolApproval: toolApprovalEnabled, // AI SDK 6.0 human-in-the-loop
     },
-  }), [selectedModel, thinkingLevel, planMode])
+  }), [selectedModel, thinkingLevel, planMode, toolApprovalEnabled])
 
   const { messages, sendMessage, status, setMessages } = useChat({
     id: tabId,
@@ -268,6 +323,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
           thinking: parts.find(p => p.type === 'thinking')?.content,
           showThinking: existing?.showThinking ?? false,
           isStreaming: isLoading && msg.id === messages[messages.length - 1]?.id,
+          timestamp: existing?.timestamp ?? Date.now(),
+          replyToId: existing?.replyToId,
         }
       })
       return newExtendedMessages
@@ -348,8 +405,30 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
 
       setIsSubmitting(true)
       setSubmitTime(Date.now())
+
+      // Track reply context
+      const currentReplyTo = replyingTo
       setInput('')
+      setReplyingTo(null)
+
       sendMessage({ text: content })
+
+      // Mark the new user message as a reply
+      if (currentReplyTo) {
+        setTimeout(() => {
+          setExtendedMessages(prev => {
+            const updated = [...prev]
+            // Find the latest user message and mark it as a reply
+            for (let i = updated.length - 1; i >= 0; i--) {
+              if (updated[i].role === 'user' && !updated[i].replyToId) {
+                updated[i] = { ...updated[i], replyToId: currentReplyTo.id }
+                break
+              }
+            }
+            return updated
+          })
+        }, 100)
+      }
 
       // Clean up timeout when streaming starts or completes
       const cleanup = () => clearTimeout(timeoutId)
@@ -399,7 +478,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
       {/* Messages Container */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto p-12 space-y-8 max-w-5xl mx-auto w-full scroll-smooth scrollbar-hide min-h-0"
+        className="flex-1 overflow-y-auto px-6 py-8 space-y-8 max-w-5xl mx-auto w-full scroll-smooth scrollbar-hide min-h-0"
       >
         {extendedMessages.length === 0 && (
           <div className="pt-6">
@@ -421,9 +500,44 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
               {msg.role === 'assistant' && turnNumber}
             </div>
             {msg.role === 'user' ? (
-              <div className="flex justify-end">
-                <div className="bg-white/[0.08] border border-white/10 px-5 py-3 rounded-2xl text-[14px] font-medium text-white/90 shadow-xl max-w-[85%] leading-relaxed hover:bg-white/[0.12] transition-colors">
-                  {msg.content}
+              <div className="flex justify-end group">
+                <div className="flex flex-col items-end gap-1.5 max-w-[85%]">
+                  {/* Reply context if replying to a message */}
+                  {msg.replyToId && (() => {
+                    const replyMsg = extendedMessages.find(m => m.id === msg.replyToId)
+                    return replyMsg ? (
+                      <div className="text-xs text-white/40 flex items-center gap-1.5 mr-2">
+                        <Reply size={12} className="rotate-180" />
+                        <span className="truncate max-w-[200px]">
+                          {replyMsg.content.slice(0, 50)}{replyMsg.content.length > 50 ? '...' : ''}
+                        </span>
+                      </div>
+                    ) : null
+                  })()}
+                  <div className="bg-white/[0.08] border border-white/10 px-5 py-3 rounded-2xl text-[14px] font-medium text-white/90 shadow-xl leading-relaxed hover:bg-white/[0.12] transition-colors">
+                    {msg.content}
+                  </div>
+                  {/* User message footer */}
+                  <div className="flex items-center gap-2 mr-2">
+                    <span className="text-[11px] text-white/30">{formatRelativeTime(msg.timestamp || Date.now())}</span>
+                    <button
+                      onClick={() => copyToClipboard(msg.content, `user-${msg.id}`)}
+                      className="p-1 text-white/20 hover:text-white/50 transition-colors"
+                      title="Copy"
+                    >
+                      {copiedId === `user-${msg.id}` ? <Check size={12} /> : <Copy size={12} />}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setReplyingTo({ id: msg.id, content: msg.content, role: msg.role })
+                        inputRef.current?.focus()
+                      }}
+                      className="p-1 text-white/20 hover:text-white/50 transition-colors"
+                      title="Reply"
+                    >
+                      <Reply size={12} />
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -441,6 +555,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
                     const partId = `${msg.id}-${idx}`
                     if (part.type === 'thinking') return null
                     if (part.type === 'text') {
+                      // Fix common markdown formatting issues
+                      const fixedContent = part.content
+                        .replace(/([.!?])##/g, '$1\n\n##')  // Add newline before headings
+                        .replace(/([.!?])#/g, '$1\n\n#')    // Same for any heading level
+                        .replace(/\n##/g, '\n\n##')         // Ensure double newline before h2
+                        .replace(/\n#/g, '\n\n#')           // Ensure double newline before any heading
+
                       return (
                         <div
                           key={partId}
@@ -448,8 +569,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
                         >
                           <ReactMarkdown
                             components={{
-                              code: ({ className, children, inline, ...props }: any) => {
-                                if (inline) {
+                              code: ({ className, children, inline, node, ...props }: any) => {
+                                const code = String(children).replace(/\n$/, '')
+                                // Treat as inline if: explicitly inline, no language, single line, or short content
+                                const isShortCode = !code.includes('\n') && code.length < 100
+                                const hasLanguage = className && /language-(\w+)/.test(className)
+                                const shouldBeInline = inline || (!hasLanguage && isShortCode)
+
+                                if (shouldBeInline) {
                                   return (
                                     <code
                                       className="bg-white/15 px-1.5 py-0.5 rounded text-sm font-mono"
@@ -461,7 +588,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
                                 }
                                 const match = /language-(\w+)/.exec(className || '')
                                 const language = match ? match[1] : 'text'
-                                const code = String(children).replace(/\n$/, '')
                                 return (
                                   <CodeBlock
                                     code={code}
@@ -471,10 +597,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
                                   />
                                 )
                               },
+                              // Better heading spacing
+                              h1: ({ children }) => <h1 className="text-xl font-semibold mt-6 mb-3 text-white">{children}</h1>,
+                              h2: ({ children }) => <h2 className="text-lg font-semibold mt-5 mb-2 text-white">{children}</h2>,
+                              h3: ({ children }) => <h3 className="text-base font-semibold mt-4 mb-2 text-white">{children}</h3>,
+                              // Better list styling
+                              ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-3">{children}</ul>,
+                              ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-3">{children}</ol>,
+                              li: ({ children }) => <li className="text-white/80">{children}</li>,
+                              // Better paragraph spacing
+                              p: ({ children }) => <p className="my-2">{children}</p>,
+                              // Pre blocks for file trees
+                              pre: ({ children }) => <pre className="bg-white/5 rounded-lg p-3 my-3 overflow-x-auto text-sm font-mono">{children}</pre>,
                             }}
                           >
-                            {part.content}
-                          </ReactMarkdown>
+                            {fixedContent}</ReactMarkdown>
                         </div>
                       )
                     }
@@ -491,6 +628,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
                       content={msg.content}
                       onCopy={() => copyToClipboard(msg.content, `msg-${msg.id}`)}
                       isCopied={copiedId === `msg-${msg.id}`}
+                      timestamp={msg.timestamp}
+                      formatRelativeTime={formatRelativeTime}
+                      onReply={() => {
+                        setReplyingTo({ id: msg.id, content: msg.content, role: msg.role })
+                        inputRef.current?.focus()
+                      }}
                     />
                   )}
                 </div>
@@ -520,8 +663,44 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Tool Approval Cards (AI SDK 6.0) */}
+      {pendingApprovals.length > 0 && (
+        <div className="px-6 pb-3 max-w-5xl mx-auto w-full space-y-3">
+          {pendingApprovals.map((request) => (
+            <ToolApprovalCard
+              key={request.approvalId}
+              request={request}
+              onApprove={approveToolCall}
+              onReject={rejectToolCall}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Input Area */}
-      <div className="p-12 pt-0 max-w-5xl mx-auto w-full">
+      <div className="px-6 pb-4 max-w-5xl mx-auto w-full" style={{ marginBottom: '15px' }}>
+        {/* Reply preview */}
+        {replyingTo && (
+          <div className="mb-2 px-3 py-2 bg-white/5 border border-white/10 rounded-xl flex items-center gap-3">
+            <Reply size={14} className="text-white/40 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="text-[11px] text-white/40 uppercase tracking-wide">
+                Replying to {replyingTo.role}
+              </span>
+              <p className="text-sm text-white/60 truncate">
+                {replyingTo.content.slice(0, 100)}{replyingTo.content.length > 100 ? '...' : ''}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyingTo(null)}
+              className="p-1 text-white/40 hover:text-white/60 transition-colors"
+              title="Cancel reply"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
         <form
           onSubmit={handleFormSubmit}
           className={clsx(
@@ -592,6 +771,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
                 title="Plan mode (⇧Tab)"
               >
                 <ClipboardList size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setToolApprovalEnabled(!toolApprovalEnabled)}
+                className={clsx(
+                  'p-2 rounded-lg transition-colors flex items-center gap-1',
+                  toolApprovalEnabled ? 'text-green-400 bg-green-500/10' : 'text-white/40 hover:text-white/60 hover:bg-white/5'
+                )}
+                title={toolApprovalEnabled ? 'Tool approval enabled (click to disable)' : 'Tool approval disabled (click to enable)'}
+              >
+                {toolApprovalEnabled ? <Shield size={16} /> : <ShieldOff size={16} />}
               </button>
               <ThinkingLevelSelector level={thinkingLevel} onChange={setThinkingLevel} />
               <MCPStatus connected={3} failed={0} />

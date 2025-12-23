@@ -4,8 +4,9 @@ import {
   User, GitBranch, Box, Terminal, Cpu, Zap, ExternalLink,
   Palette, ChevronDown, MessageSquare, History, FileJson,
   Info, Key, LogOut, Check, Save, AlertCircle, Moon, Sun,
-  Volume2, Bell, Eye, Code, Keyboard, Globe, Shield
+  Volume2, Bell, Eye, Code, Keyboard, Globe, Shield, Link, Unlink, Plus, X
 } from 'lucide-react';
+import { oauthService } from '../services/oauthService';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -24,8 +25,9 @@ interface Settings {
   appearance: {
     theme: 'dark' | 'light' | 'system';
     monoFont: string;
-    fontSize: number;
-    lineHeight: number;
+    monoFontSize: number;
+    appFont: string;
+    appFontSize: number;
     accentColor: string;
   };
   git: {
@@ -40,6 +42,7 @@ interface Settings {
     useBedrock: boolean;
     awsRegion: string;
     openaiApiKey: string;
+    customVars: Array<{ name: string; value: string }>;
   };
   claude: {
     maxTokens: number;
@@ -72,8 +75,9 @@ const defaultSettings: Settings = {
   appearance: {
     theme: 'dark',
     monoFont: 'Geist Mono',
-    fontSize: 13,
-    lineHeight: 1.5,
+    monoFontSize: 13,
+    appFont: 'Inter',
+    appFontSize: 14,
     accentColor: '#3B82F6',
   },
   git: {
@@ -88,6 +92,7 @@ const defaultSettings: Settings = {
     useBedrock: false,
     awsRegion: 'us-east-1',
     openaiApiKey: '',
+    customVars: [],
   },
   claude: {
     maxTokens: 8192,
@@ -124,9 +129,100 @@ const Toggle: React.FC<{ enabled: boolean; onChange: (v: boolean) => void }> = (
   </button>
 );
 
+type VerifyStatus = 'idle' | 'verifying' | 'success' | 'error';
+
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState('chat');
   const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [anthropicVerify, setAnthropicVerify] = useState<VerifyStatus>('idle');
+  const [openaiVerify, setOpenaiVerify] = useState<VerifyStatus>('idle');
+  const [claudeConnected, setClaudeConnected] = useState(false);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
+
+  // Check Claude OAuth status
+  useEffect(() => {
+    oauthService.getStatus().then(status => {
+      setClaudeConnected(status.isLoggedIn);
+    }).catch(() => setClaudeConnected(false));
+  }, []);
+
+  const disconnectClaude = async () => {
+    setDisconnecting('claude');
+    try {
+      await oauthService.logout();
+      setClaudeConnected(false);
+    } catch (e) {
+      console.error('Failed to disconnect Claude:', e);
+    }
+    setDisconnecting(null);
+  };
+
+  const disconnectOpenAI = () => {
+    setDisconnecting('openai');
+    updateSettings('env', 'openaiApiKey', '');
+    setTimeout(() => setDisconnecting(null), 500);
+  };
+
+  const disconnectAnthropic = () => {
+    setDisconnecting('anthropic');
+    updateSettings('env', 'anthropicApiKey', '');
+    setTimeout(() => setDisconnecting(null), 500);
+  };
+
+  const addCustomVar = () => {
+    const newVars = [...(settings.env.customVars || []), { name: '', value: '' }];
+    updateSettings('env', 'customVars', newVars);
+  };
+
+  const updateCustomVar = (index: number, field: 'name' | 'value', val: string) => {
+    const newVars = [...(settings.env.customVars || [])];
+    newVars[index] = { ...newVars[index], [field]: val };
+    updateSettings('env', 'customVars', newVars);
+  };
+
+  const removeCustomVar = (index: number) => {
+    const newVars = (settings.env.customVars || []).filter((_, i) => i !== index);
+    updateSettings('env', 'customVars', newVars);
+  };
+
+  const verifyAnthropicKey = async () => {
+    if (!settings.env.anthropicApiKey) return;
+    setAnthropicVerify('verifying');
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': settings.env.anthropicApiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-3-haiku-20240307',
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'Hi' }]
+        })
+      });
+      setAnthropicVerify(res.ok ? 'success' : 'error');
+    } catch {
+      setAnthropicVerify('error');
+    }
+    setTimeout(() => setAnthropicVerify('idle'), 3000);
+  };
+
+  const verifyOpenAIKey = async () => {
+    if (!settings.env.openaiApiKey) return;
+    setOpenaiVerify('verifying');
+    try {
+      const res = await fetch('https://api.openai.com/v1/models', {
+        headers: { 'Authorization': `Bearer ${settings.env.openaiApiKey}` }
+      });
+      setOpenaiVerify(res.ok ? 'success' : 'error');
+    } catch {
+      setOpenaiVerify('error');
+    }
+    setTimeout(() => setOpenaiVerify('idle'), 3000);
+  };
 
   // Load settings from localStorage
   useEffect(() => {
@@ -196,7 +292,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   return (
     <div className="fixed inset-0 z-[100] bg-[#0d0d0d] flex animate-in fade-in duration-200">
       {/* Settings Nav */}
-      <div className="w-[280px] h-full border-r border-white/5 flex flex-col p-6 shrink-0">
+      <div className="w-[280px] h-full border-r border-white/5 flex flex-col p-6 pt-12 shrink-0">
         <h2 className="text-lg font-semibold text-white mb-6">Settings</h2>
 
         <div className="space-y-8 overflow-y-auto scrollbar-hide flex-1">
@@ -329,36 +425,61 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
                   <h3 className="text-base font-semibold text-white">Mono Font</h3>
-                  <p className="text-sm text-white/50 mt-1">Used for code and terminal</p>
+                  <p className="text-sm text-white/50 mt-1">Code and terminal</p>
                 </div>
-                <select
-                  value={settings.appearance.monoFont}
-                  onChange={(e) => updateSettings('appearance', 'monoFont', e.target.value)}
-                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-base text-white outline-none w-48"
-                >
-                  <option value="Geist Mono">Geist Mono</option>
-                  <option value="SF Mono">SF Mono</option>
-                  <option value="JetBrains Mono">JetBrains Mono</option>
-                  <option value="Fira Code">Fira Code</option>
-                  <option value="Monaco">Monaco</option>
-                </select>
+                <div className="flex items-center gap-3">
+                  <select
+                    value={settings.appearance.monoFont}
+                    onChange={(e) => updateSettings('appearance', 'monoFont', e.target.value)}
+                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none w-40"
+                  >
+                    <option value="Geist Mono">Geist Mono</option>
+                    <option value="SF Mono">SF Mono</option>
+                    <option value="JetBrains Mono">JetBrains Mono</option>
+                    <option value="Fira Code">Fira Code</option>
+                    <option value="Monaco">Monaco</option>
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min="10"
+                      max="20"
+                      value={settings.appearance.monoFontSize}
+                      onChange={(e) => updateSettings('appearance', 'monoFontSize', Number(e.target.value))}
+                      className="w-20"
+                    />
+                    <span className="text-sm text-white/60 w-10">{settings.appearance.monoFontSize}px</span>
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
-                  <h3 className="text-base font-semibold text-white">Font Size</h3>
-                  <p className="text-sm text-white/50 mt-1">Editor and terminal font size</p>
+                  <h3 className="text-base font-semibold text-white">Application Font</h3>
+                  <p className="text-sm text-white/50 mt-1">UI and interface</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min="10"
-                    max="20"
-                    value={settings.appearance.fontSize}
-                    onChange={(e) => updateSettings('appearance', 'fontSize', Number(e.target.value))}
-                    className="w-32"
-                  />
-                  <span className="text-base text-white/60 w-12">{settings.appearance.fontSize}px</span>
+                <div className="flex items-center gap-3">
+                  <select
+                    value={settings.appearance.appFont}
+                    onChange={(e) => updateSettings('appearance', 'appFont', e.target.value)}
+                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none w-40"
+                  >
+                    <option value="Inter">Inter</option>
+                    <option value="SF Pro">SF Pro</option>
+                    <option value="Helvetica Neue">Helvetica Neue</option>
+                    <option value="system-ui">System</option>
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min="12"
+                      max="18"
+                      value={settings.appearance.appFontSize}
+                      onChange={(e) => updateSettings('appearance', 'appFontSize', Number(e.target.value))}
+                      className="w-20"
+                    />
+                    <span className="text-sm text-white/60 w-10">{settings.appearance.appFontSize}px</span>
+                  </div>
                 </div>
               </div>
 
@@ -366,7 +487,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <h3 className="text-base font-semibold text-white mb-4">Preview</h3>
                 <div
                   className="bg-[#0D0D0D] border border-white/5 rounded-xl p-6 leading-relaxed text-white/60 shadow-inner"
-                  style={{ fontFamily: settings.appearance.monoFont, fontSize: settings.appearance.fontSize }}
+                  style={{ fontFamily: settings.appearance.monoFont, fontSize: settings.appearance.monoFontSize }}
                 >
                   <p className="text-white/20 mb-2">// Preview</p>
                   <p><span className="text-purple-400">const</span> greeting = <span className="text-green-400">'Hello, World!'</span>;</p>
@@ -450,36 +571,107 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         {/* Environment Settings */}
         {activeTab === 'env' && (
           <div className="space-y-8 animate-in fade-in slide-in-from-right-4">
-            <h1 className="text-2xl font-bold text-white">Environment Variables</h1>
+            <h1 className="text-2xl font-bold text-white">Secrets & Environment</h1>
             <div className="space-y-6">
-              <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-3 text-sm text-green-400">
-                <Check size={18} />
-                Connected via Anthropic OAuth
-              </div>
-
               <div className="space-y-4">
                 <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest">API Keys</h3>
 
                 <div className="space-y-2">
-                  <label className="text-sm text-white/60">Anthropic API Key (optional)</label>
-                  <input
-                    type="password"
-                    value={settings.env.anthropicApiKey}
-                    onChange={(e) => updateSettings('env', 'anthropicApiKey', e.target.value)}
-                    placeholder="sk-ant-..."
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-base text-white font-mono outline-none placeholder:text-white/20"
-                  />
+                  <label className="text-sm text-white/60">Anthropic API Key {claudeConnected ? '' : '(optional)'}</label>
+                  {claudeConnected ? (
+                    <div className="flex items-center gap-2 px-3 py-2.5 bg-green-500/5 border border-green-500/20 rounded-lg text-sm text-green-400/70">
+                      <Check size={14} />
+                      Connected via OAuth
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        value={settings.env.anthropicApiKey}
+                        onChange={(e) => updateSettings('env', 'anthropicApiKey', e.target.value)}
+                        placeholder="sk-ant-..."
+                        className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-base text-white font-mono outline-none placeholder:text-white/20"
+                      />
+                      <button
+                        onClick={verifyAnthropicKey}
+                        disabled={!settings.env.anthropicApiKey || anthropicVerify === 'verifying'}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                          anthropicVerify === 'success' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                          anthropicVerify === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                          'bg-white/5 text-white/60 hover:text-white hover:bg-white/10 border border-white/10'
+                        }`}
+                      >
+                        {anthropicVerify === 'verifying' ? '...' :
+                         anthropicVerify === 'success' ? <Check size={16} /> :
+                         anthropicVerify === 'error' ? <AlertCircle size={16} /> : 'Verify'}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-sm text-white/60">OpenAI API Key (optional)</label>
-                  <input
-                    type="password"
-                    value={settings.env.openaiApiKey}
-                    onChange={(e) => updateSettings('env', 'openaiApiKey', e.target.value)}
-                    placeholder="sk-..."
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-base text-white font-mono outline-none placeholder:text-white/20"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={settings.env.openaiApiKey}
+                      onChange={(e) => updateSettings('env', 'openaiApiKey', e.target.value)}
+                      placeholder="sk-..."
+                      className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-base text-white font-mono outline-none placeholder:text-white/20"
+                    />
+                    <button
+                      onClick={verifyOpenAIKey}
+                      disabled={!settings.env.openaiApiKey || openaiVerify === 'verifying'}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                        openaiVerify === 'success' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                        openaiVerify === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                        'bg-white/5 text-white/60 hover:text-white hover:bg-white/10 border border-white/10'
+                      }`}
+                    >
+                      {openaiVerify === 'verifying' ? '...' :
+                       openaiVerify === 'success' ? <Check size={16} /> :
+                       openaiVerify === 'error' ? <AlertCircle size={16} /> : 'Verify'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Custom Environment Variables */}
+              <div className="space-y-4 pt-4 border-t border-white/5">
+                <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest">Custom Variables</h3>
+
+                <div className="space-y-2">
+                  {(settings.env.customVars || []).map((v, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={v.name}
+                        onChange={(e) => updateCustomVar(idx, 'name', e.target.value)}
+                        placeholder="VARIABLE_NAME"
+                        className="w-[180px] bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono outline-none placeholder:text-white/20 uppercase"
+                      />
+                      <input
+                        type="password"
+                        value={v.value}
+                        onChange={(e) => updateCustomVar(idx, 'value', e.target.value)}
+                        placeholder="value..."
+                        className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono outline-none placeholder:text-white/20"
+                      />
+                      <button
+                        onClick={() => removeCustomVar(idx)}
+                        className="px-2 py-2 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={addCustomVar}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                  >
+                    <Plus size={14} />
+                    Add Variable
+                  </button>
                 </div>
               </div>
 
@@ -591,43 +783,113 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         {/* Account Settings */}
         {activeTab === 'account' && (
           <div className="space-y-8 animate-in fade-in slide-in-from-right-4">
-            <h1 className="text-2xl font-bold text-white">Account</h1>
-            <div className="space-y-6">
-              <div className="p-6 bg-white/5 rounded-xl border border-white/10">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center text-2xl font-bold text-white">
-                    M
+            <h1 className="text-2xl font-bold text-white">Connected Accounts</h1>
+
+            <div className="space-y-3">
+              {/* Claude OAuth */}
+              <div className={`p-4 rounded-xl border transition-colors ${
+                claudeConnected
+                  ? 'bg-green-500/5 border-green-500/20'
+                  : 'bg-white/5 border-white/10'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                      claudeConnected ? 'bg-[#D97757]' : 'bg-white/10'
+                    }`}>
+                      <span className="text-white font-bold text-sm">C</span>
+                    </div>
+                    <div>
+                      <h3 className="text-base font-medium text-white">Claude</h3>
+                      <p className="text-xs text-white/40">
+                        {claudeConnected ? 'Connected via OAuth' : 'Not connected'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-white">Mozart User</h3>
-                    <p className="text-sm text-white/50">Connected via OAuth</p>
-                    <span className="inline-block mt-2 px-2 py-1 bg-blue-500/20 text-blue-400 text-sm font-medium rounded">
-                      Pro Plan
+                  {claudeConnected ? (
+                    <button
+                      onClick={disconnectClaude}
+                      disabled={disconnecting === 'claude'}
+                      className="flex items-center gap-2 px-3 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors text-sm"
+                    >
+                      {disconnecting === 'claude' ? '...' : <><Unlink size={14} /> Disconnect</>}
+                    </button>
+                  ) : (
+                    <span className="flex items-center gap-1.5 text-xs text-white/30">
+                      <Link size={12} /> Login from main screen
                     </span>
-                  </div>
+                  )}
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest">Usage</h3>
-                <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-base text-white/60">API Calls This Month</span>
-                    <span className="text-base text-white font-medium">12,345 / 100,000</span>
+              {/* Anthropic API Key */}
+              <div className={`p-4 rounded-xl border transition-colors ${
+                settings.env.anthropicApiKey
+                  ? 'bg-green-500/5 border-green-500/20'
+                  : 'bg-white/5 border-white/10'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                      settings.env.anthropicApiKey ? 'bg-[#D97757]' : 'bg-white/10'
+                    }`}>
+                      <span className="text-white font-bold text-sm">A</span>
+                    </div>
+                    <div>
+                      <h3 className="text-base font-medium text-white">Anthropic</h3>
+                      <p className="text-xs text-white/40">
+                        {settings.env.anthropicApiKey ? 'API Key configured' : 'Not configured'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500 rounded-full" style={{ width: '12.3%' }} />
-                  </div>
+                  {settings.env.anthropicApiKey && (
+                    <button
+                      onClick={disconnectAnthropic}
+                      disabled={disconnecting === 'anthropic'}
+                      className="flex items-center gap-2 px-3 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors text-sm"
+                    >
+                      {disconnecting === 'anthropic' ? '...' : <><Unlink size={14} /> Remove</>}
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-white/5">
-                <button className="flex items-center gap-2 px-4 py-2.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors text-base">
-                  <LogOut size={18} />
-                  Sign Out
-                </button>
+              {/* OpenAI API Key */}
+              <div className={`p-4 rounded-xl border transition-colors ${
+                settings.env.openaiApiKey
+                  ? 'bg-green-500/5 border-green-500/20'
+                  : 'bg-white/5 border-white/10'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                      settings.env.openaiApiKey ? 'bg-[#10A37F]' : 'bg-white/10'
+                    }`}>
+                      <span className="text-white font-bold text-sm">O</span>
+                    </div>
+                    <div>
+                      <h3 className="text-base font-medium text-white">OpenAI</h3>
+                      <p className="text-xs text-white/40">
+                        {settings.env.openaiApiKey ? 'API Key configured' : 'Not configured'}
+                      </p>
+                    </div>
+                  </div>
+                  {settings.env.openaiApiKey && (
+                    <button
+                      onClick={disconnectOpenAI}
+                      disabled={disconnecting === 'openai'}
+                      className="flex items-center gap-2 px-3 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors text-sm"
+                    >
+                      {disconnecting === 'openai' ? '...' : <><Unlink size={14} /> Remove</>}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
+
+            <p className="text-xs text-white/30 pt-2">
+              API keys can be configured in the Environment section. OAuth connections are managed through the login flow.
+            </p>
           </div>
         )}
 

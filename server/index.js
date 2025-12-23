@@ -9,7 +9,103 @@ import { WebSocketServer } from 'ws';
 
 // Use Claude Code provider which spawns Claude CLI with its own auth
 import { claudeCode } from 'ai-sdk-provider-claude-code';
-import { streamText, convertToModelMessages } from 'ai';
+import { streamText, streamObject, convertToModelMessages } from 'ai';
+import { z } from 'zod';
+
+// AI SDK 6.0 - Structured Output Schema for Plan Mode
+const PlanStepSchema = z.object({
+  id: z.string().describe('Unique identifier for this step'),
+  label: z.string().describe('Short label for the step'),
+  description: z.string().describe('Detailed description of what this step involves'),
+  files: z.array(z.string()).optional().describe('Files that will be modified in this step'),
+});
+
+const PlanResponseSchema = z.object({
+  thinking: z.string().describe('Internal reasoning about the task and approach'),
+  plan: z.object({
+    title: z.string().describe('Short title for the implementation plan'),
+    summary: z.string().describe('Brief summary of the overall approach'),
+    steps: z.array(PlanStepSchema).describe('Ordered list of implementation steps'),
+  }),
+  questions: z.array(z.string()).optional().describe('Questions for user clarification before proceeding'),
+});
+
+// ==========================================
+// Tool Approval System (AI SDK 6.0)
+// ==========================================
+
+// Tools that are always safe (read-only)
+const SAFE_TOOLS = ['Read', 'Glob', 'Grep', 'LS', 'WebSearch', 'WebFetch', 'Task', 'TodoWrite'];
+
+// Tools that require approval
+const APPROVAL_REQUIRED_TOOLS = ['Edit', 'Write', 'Bash', 'MultiEdit', 'NotebookEdit'];
+
+// Pending tool approvals: Map<approvalId, { resolve, reject, toolName, input }>
+const pendingToolApprovals = new Map();
+
+// Connected WebSocket clients for tool approval
+const toolApprovalClients = new Set();
+
+// Generate unique approval ID
+const generateApprovalId = () => `approval_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+// Request tool approval from connected clients
+const requestToolApproval = (toolName, input) => {
+  return new Promise((resolve, reject) => {
+    const approvalId = generateApprovalId();
+
+    // Store the pending approval
+    pendingToolApprovals.set(approvalId, {
+      resolve,
+      reject,
+      toolName,
+      input,
+      createdAt: Date.now(),
+    });
+
+    // Broadcast to all connected approval clients
+    const message = JSON.stringify({
+      type: 'tool-approval-request',
+      approvalId,
+      toolName,
+      input,
+      timestamp: Date.now(),
+    });
+
+    for (const client of toolApprovalClients) {
+      if (client.readyState === 1) { // WebSocket.OPEN
+        client.send(message);
+      }
+    }
+
+    // Timeout after 5 minutes
+    setTimeout(() => {
+      if (pendingToolApprovals.has(approvalId)) {
+        pendingToolApprovals.delete(approvalId);
+        reject(new Error('Tool approval timed out'));
+      }
+    }, 5 * 60 * 1000);
+  });
+};
+
+// Handle approval response
+const handleApprovalResponse = (approvalId, approved, reason) => {
+  const pending = pendingToolApprovals.get(approvalId);
+  if (!pending) {
+    console.warn(`No pending approval found for ${approvalId}`);
+    return false;
+  }
+
+  pendingToolApprovals.delete(approvalId);
+
+  if (approved) {
+    pending.resolve(true);
+  } else {
+    pending.resolve(false);
+  }
+
+  return true;
+};
 
 import {
   startLogin,
@@ -490,6 +586,38 @@ const handleRequest = async (req, res) => {
   }
 
   // ==========================================
+  // Shell Actions (Finder, Terminal)
+  // ==========================================
+
+  if (parsed.pathname === '/api/shell/open-folder' && method === 'GET') {
+    try {
+      let folderPath = parsed.searchParams.get('path') || '';
+      if (folderPath.startsWith('~')) {
+        folderPath = folderPath.replace(/^~/, os.homedir());
+      }
+      // macOS: open in Finder
+      await execFileAsync('open', [folderPath]);
+      return sendJson(res, 200, { success: true });
+    } catch (error) {
+      return sendError(res, 500, error.message || 'Failed to open folder');
+    }
+  }
+
+  if (parsed.pathname === '/api/shell/open-terminal' && method === 'GET') {
+    try {
+      let folderPath = parsed.searchParams.get('path') || '';
+      if (folderPath.startsWith('~')) {
+        folderPath = folderPath.replace(/^~/, os.homedir());
+      }
+      // macOS: open Terminal.app at the specified directory
+      await execFileAsync('open', ['-a', 'Terminal', folderPath]);
+      return sendJson(res, 200, { success: true });
+    } catch (error) {
+      return sendError(res, 500, error.message || 'Failed to open terminal');
+    }
+  }
+
+  // ==========================================
   // GitHub Endpoints (uses gh CLI)
   // ==========================================
 
@@ -725,7 +853,7 @@ const handleRequest = async (req, res) => {
       if (body.model?.includes('opus')) modelId = 'opus';
 
       // Convert UIMessages (from frontend) to ModelMessages (for AI SDK)
-      const modelMessages = convertToModelMessages(body.messages);
+      const modelMessages = await convertToModelMessages(body.messages);
 
       // Determine system prompt based on planMode
       const isPlanMode = body.planMode === true;
@@ -756,14 +884,84 @@ When planning:
 
 Be thorough in your analysis. A good plan now saves debugging later.`;
 
-      // Build streamText options
-      const streamOptions = {
-        model: claudeCode(modelId, {
-          // In plan mode, restrict to read-only tools
-          ...(isPlanMode && {
+      // AI SDK 6.0: Use structured output for plan mode when requested
+      const useStructuredOutput = isPlanMode && body.structuredOutput === true;
+
+      if (useStructuredOutput) {
+        // Structured output mode - returns guaranteed JSON schema
+        const result = streamObject({
+          model: claudeCode(modelId, {
             allowedTools: ['Read', 'Glob', 'Grep', 'LS', 'TodoWrite', 'WebSearch', 'WebFetch', 'Task']
+          }),
+          schema: PlanResponseSchema,
+          system: planModeSystemPrompt,
+          messages: modelMessages,
+          ...(thinkingBudget && {
+            providerOptions: {
+              anthropic: {
+                thinking: { type: 'enabled', budgetTokens: thinkingBudget }
+              }
+            }
           })
+        });
+
+        // Stream the structured object as JSON
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        });
+
+        for await (const partial of result.partialObjectStream) {
+          res.write(`data: ${JSON.stringify({ type: 'partial', data: partial })}\n\n`);
+        }
+
+        const finalObject = await result.object;
+        res.write(`data: ${JSON.stringify({ type: 'complete', data: finalObject })}\n\n`);
+        res.end();
+        return;
+      }
+
+      // Check if tool approval is enabled
+      const toolApprovalEnabled = body.toolApproval === true;
+
+      // Build model options
+      const modelOptions = {
+        // In plan mode, restrict to read-only tools
+        ...(isPlanMode && {
+          allowedTools: ['Read', 'Glob', 'Grep', 'LS', 'TodoWrite', 'WebSearch', 'WebFetch', 'Task']
         }),
+        // Enable streaming input for canUseTool (AI SDK 6.0)
+        ...(toolApprovalEnabled && {
+          streamingInput: 'auto',
+          canUseTool: async ({ name, input }) => {
+            // Always approve safe/read-only tools
+            if (SAFE_TOOLS.includes(name)) {
+              return true;
+            }
+
+            // For tools requiring approval, request human approval
+            if (APPROVAL_REQUIRED_TOOLS.includes(name)) {
+              console.log(`Tool approval requested: ${name}`, input);
+              try {
+                const approved = await requestToolApproval(name, input);
+                console.log(`Tool ${name} ${approved ? 'approved' : 'rejected'}`);
+                return approved;
+              } catch (error) {
+                console.error(`Tool approval error for ${name}:`, error);
+                return false; // Deny on error/timeout
+              }
+            }
+
+            // Default: approve unknown tools (they may be custom)
+            return true;
+          }
+        })
+      };
+
+      // Build streamText options (default mode)
+      const streamOptions = {
+        model: claudeCode(modelId, modelOptions),
         maxTokens,
         system: isPlanMode ? planModeSystemPrompt : normalSystemPrompt,
         messages: modelMessages,
@@ -1170,9 +1368,63 @@ const start = async () => {
     console.error('WebSocket server error:', error);
   });
 
+  // WebSocket server for tool approval (AI SDK 6.0 human-in-the-loop)
+  const toolApprovalWss = new WebSocketServer({ server, path: '/api/tool-approval' });
+
+  toolApprovalWss.on('connection', (ws) => {
+    console.log('Tool approval WebSocket connected');
+    toolApprovalClients.add(ws);
+
+    ws.on('message', (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+
+        if (message.type === 'approval-response') {
+          const { approvalId, approved, reason } = message;
+          const handled = handleApprovalResponse(approvalId, approved, reason);
+
+          // Acknowledge the response
+          ws.send(JSON.stringify({
+            type: 'approval-acknowledged',
+            approvalId,
+            handled,
+          }));
+        }
+      } catch (error) {
+        console.error('Tool approval message error:', error);
+      }
+    });
+
+    ws.on('close', () => {
+      console.log('Tool approval WebSocket disconnected');
+      toolApprovalClients.delete(ws);
+    });
+
+    ws.on('error', (error) => {
+      console.error('Tool approval WebSocket error:', error);
+      toolApprovalClients.delete(ws);
+    });
+
+    // Send current pending approvals to newly connected client
+    for (const [approvalId, pending] of pendingToolApprovals) {
+      ws.send(JSON.stringify({
+        type: 'tool-approval-request',
+        approvalId,
+        toolName: pending.toolName,
+        input: pending.input,
+        timestamp: pending.createdAt,
+      }));
+    }
+  });
+
+  toolApprovalWss.on('error', (error) => {
+    console.error('Tool approval WebSocket server error:', error);
+  });
+
   server.listen(PORT, () => {
     console.log(`Mozart API server running on http://localhost:${PORT}`);
     console.log(`Terminal WebSocket available at ws://localhost:${PORT}/api/terminal`);
+    console.log(`Tool Approval WebSocket available at ws://localhost:${PORT}/api/tool-approval`);
   });
 
   callbackServer.listen(OAUTH_CALLBACK_PORT, () => {

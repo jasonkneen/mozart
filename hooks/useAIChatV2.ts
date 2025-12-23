@@ -118,7 +118,7 @@ export type MCPToolCaller = (
   error?: string
 }>
 
-export interface CoreMessage {
+export interface ModelMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
 }
@@ -320,7 +320,7 @@ export function useAIChatV2(options: UseAIChatOptions = {}) {
     projectFolder,
   }: {
     modelId: string
-    messages: CoreMessage[]
+    messages: ModelMessage[]
     providers: ProviderConfig[]
     system?: string
     tools?: ToolsMap
@@ -898,7 +898,7 @@ export function useAIChatV2(options: UseAIChatOptions = {}) {
     projectFolder,
   }: {
     modelId: string
-    messages: CoreMessage[]
+    messages: ModelMessage[]
     providers: ProviderConfig[]
     system?: string
     tools?: ToolsMap
@@ -1128,7 +1128,7 @@ export function useAIChatV2(options: UseAIChatOptions = {}) {
 /**
  * Convert app messages to CoreMessage format
  */
-export function toCoreMessages(messages: ChatMessage[]): CoreMessage[] {
+export function toCoreMessages(messages: ChatMessage[]): ModelMessage[] {
   return messages.map(msg => ({
     role: msg.role,
     content: msg.content,

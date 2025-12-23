@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import './styles.css';
 import App from './App';
 import { ConductorStoreProvider } from './services/store';
 import { ThemeProvider } from './hooks/useTheme';

@@ -1,3 +1,4 @@
+import { z } from 'zod';
 
 export enum ThinkingLevel {
   None = 'None',
@@ -175,3 +176,36 @@ export type CodeComment = {
   content: string;
   createdAt: number;
 };
+
+// AI SDK 6.0 - Structured Output Schema for Plan Mode
+
+export const PlanStepSchema = z.object({
+  id: z.string().describe('Unique identifier for this step'),
+  label: z.string().describe('Short label for the step'),
+  description: z.string().describe('Detailed description of what this step involves'),
+  files: z.array(z.string()).optional().describe('Files that will be modified in this step'),
+  dependencies: z.array(z.string()).optional().describe('Step IDs this step depends on'),
+});
+
+export const PlanResponseSchema = z.object({
+  thinking: z.string().describe('Internal reasoning about the task and approach'),
+  plan: z.object({
+    title: z.string().describe('Short title for the implementation plan'),
+    summary: z.string().describe('Brief summary of the overall approach'),
+    steps: z.array(PlanStepSchema).describe('Ordered list of implementation steps'),
+    estimatedComplexity: z.enum(['low', 'medium', 'high']).optional().describe('Overall complexity estimate'),
+    risks: z.array(z.string()).optional().describe('Potential risks or considerations'),
+  }),
+  questions: z.array(z.string()).optional().describe('Questions for user clarification before proceeding'),
+  recommendedModel: z.enum(['haiku', 'sonnet', 'opus']).optional().describe('Recommended model for implementation'),
+});
+
+export type PlanStep = z.infer<typeof PlanStepSchema>;
+export type PlanResponse = z.infer<typeof PlanResponseSchema>;
+
+// AI SDK 6.0 - Message Part Types for UI
+export type SDKMessagePart =
+  | { type: 'text'; text: string }
+  | { type: 'reasoning'; reasoning: string }
+  | { type: 'tool-invocation'; toolInvocationId: string; toolName: string; args: unknown; state: 'pending' | 'call' | 'result'; result?: unknown }
+  | { type: 'source'; source: { type: string; id?: string; url?: string; title?: string } };

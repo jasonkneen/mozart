@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+/* Custom CSS variables from index.html are now in the HTML <style> block */
+/* Additional app-wide styles can go here */
+
+/* Prose overrides for markdown */
+.prose pre {
+  background: transparent;
+  padding: 0;
+  margin: 0;
+}
+
+/* Animation utilities */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in-from-bottom-2 {
+  from { transform: translateY(0.5rem); }
+  to { transform: translateY(0); }
+}
+
+.animate-in {
+  animation: fade-in 0.2s ease-out, slide-in-from-bottom-2 0.2s ease-out;
+}
+
+.fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.slide-in-from-bottom-2 {
+  animation: slide-in-from-bottom-2 0.2s ease-out;
+}

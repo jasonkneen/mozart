@@ -143,6 +143,15 @@
       "name": "ai-task-1766441800037",
       "createdAt": 1766441802254,
       "baseBranch": "main"
+    },
+    "ws-1766476589536": {
+      "id": "ws-1766476589536",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1766476589536-474",
+      "repoPath": "/Users/jkneen/Documents/GitHub/Agente",
+      "branch": "ai-task-1766476589536",
+      "name": "ai-task-1766476589536",
+      "createdAt": 1766476589830,
+      "baseBranch": "main"
     }
   }
 }

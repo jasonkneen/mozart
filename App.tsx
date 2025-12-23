@@ -53,6 +53,36 @@ const App: React.FC = () => {
   const [showRightSidebar, setShowRightSidebar] = useState(true);
   const [diffHunksByTab, setDiffHunksByTab] = useState<Record<string, DiffHunk[]>>({});
 
+  // Apply font settings from localStorage
+  useEffect(() => {
+    const applyFontSettings = () => {
+      const saved = localStorage.getItem('mozart-settings');
+      if (saved) {
+        try {
+          const settings = JSON.parse(saved);
+          if (settings.appearance?.appFont) {
+            document.documentElement.style.setProperty('--app-font', settings.appearance.appFont);
+            document.body.style.fontFamily = `${settings.appearance.appFont}, system-ui, sans-serif`;
+          }
+          if (settings.appearance?.appFontSize) {
+            document.documentElement.style.setProperty('--app-font-size', `${settings.appearance.appFontSize}px`);
+            document.body.style.fontSize = `${settings.appearance.appFontSize}px`;
+          }
+          if (settings.appearance?.monoFont) {
+            document.documentElement.style.setProperty('--mono-font', settings.appearance.monoFont);
+          }
+          if (settings.appearance?.monoFontSize) {
+            document.documentElement.style.setProperty('--mono-font-size', `${settings.appearance.monoFontSize}px`);
+          }
+        } catch {}
+      }
+    };
+    applyFontSettings();
+    // Re-apply when settings modal closes (settings saved)
+    const interval = setInterval(applyFontSettings, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isResizingLeft) {
@@ -331,10 +361,10 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen w-full bg-base overflow-hidden font-sans selection:bg-blue-500/30" style={{ color: 'var(--text-primary)' }}>
-      {/* Sidebar toggle buttons - tracks left sidebar width */}
+      {/* Sidebar toggle buttons - tracks left sidebar width, avoids macOS traffic lights */}
       <div
         className="fixed z-50 flex items-center gap-1 transition-[left] duration-150"
-        style={{ left: showLeftSidebar ? leftSidebarWidth - 58 : 12, top: 11 }}
+        style={{ left: showLeftSidebar ? leftSidebarWidth - 58 : 80, top: 11 }}
       >
         <button
           onClick={() => setShowLeftSidebar(!showLeftSidebar)}
@@ -471,7 +501,7 @@ const App: React.FC = () => {
         </main>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center text-[#E5E5E5] gap-12">
-          <div className="font-mono text-[10px] sm:text-xs md:text-sm leading-[1.1] text-blue-500/80 whitespace-pre select-none opacity-80">
+          <div className="font-mono text-[10px] sm:text-xs md:text-sm leading-[1.1] text-white/60 whitespace-pre select-none">
 {`███    ███  ██████  ███████  █████  ██████  ████████
 ████  ████ ██    ██    ███  ██   ██ ██   ██    ██
 ██ ████ ██ ██    ██   ███   ███████ ██████     ██
@@ -484,8 +514,8 @@ const App: React.FC = () => {
               onClick={() => handleOpenRepoModal('local')}
               className="group flex flex-col items-start gap-3 p-6 bg-elevated hover:bg-hover border border-subtle hover:border-default rounded-xl transition-all hover:-translate-y-1 hover:shadow-xl text-left"
             >
-              <div className="p-3 bg-blue-500/10 rounded-lg group-hover:bg-blue-500/20 transition-colors">
-                <FolderOpen size={24} className="text-blue-400" />
+              <div className="p-3 bg-white/5 rounded-lg group-hover:bg-white/10 transition-colors">
+                <FolderOpen size={24} className="text-white/50 group-hover:text-white/70" />
               </div>
               <div>
                 <h3 className="text-sm font-bold text-secondary mb-1 group-hover:text-primary">Open project</h3>
@@ -497,8 +527,8 @@ const App: React.FC = () => {
               onClick={() => handleOpenRepoModal('url')}
               className="group flex flex-col items-start gap-3 p-6 bg-elevated hover:bg-hover border border-subtle hover:border-default rounded-xl transition-all hover:-translate-y-1 hover:shadow-xl text-left"
             >
-              <div className="p-3 bg-purple-500/10 rounded-lg group-hover:bg-purple-500/20 transition-colors">
-                <Globe size={24} className="text-purple-400" />
+              <div className="p-3 bg-white/5 rounded-lg group-hover:bg-white/10 transition-colors">
+                <Globe size={24} className="text-white/50 group-hover:text-white/70" />
               </div>
               <div>
                 <h3 className="text-sm font-bold text-secondary mb-1 group-hover:text-primary">Clone from URL</h3>
@@ -510,8 +540,8 @@ const App: React.FC = () => {
               onClick={() => handleAddWorkspace()}
               className="group flex flex-col items-start gap-3 p-6 bg-elevated hover:bg-hover border border-subtle hover:border-default rounded-xl transition-all hover:-translate-y-1 hover:shadow-xl text-left"
             >
-              <div className="p-3 bg-green-500/10 rounded-lg group-hover:bg-green-500/20 transition-colors">
-                <FileText size={24} className="text-green-400" />
+              <div className="p-3 bg-white/5 rounded-lg group-hover:bg-white/10 transition-colors">
+                <FileText size={24} className="text-white/50 group-hover:text-white/70" />
               </div>
               <div>
                 <h3 className="text-sm font-bold text-secondary mb-1 group-hover:text-primary">Quick start</h3>

@@ -27,7 +27,7 @@ export {
   type ToolsMap,
   type MCPToolDefinition,
   type MCPToolCaller,
-  type CoreMessage,
+  type ModelMessage,
   getProviderForModel,
   toCoreMessages,
   mcpToolsToAISDKFormat,
