@@ -18,7 +18,8 @@ const Terminal: React.FC<TerminalProps> = ({ workspacePath, className }) => {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected')
 
   const connectToPty = useCallback((term: GhosttyTerminal) => {
-    const wsUrl = `ws://localhost:4545/api/terminal${workspacePath ? `?cwd=${encodeURIComponent(workspacePath)}` : ''}`
+    const hostname = window.location.hostname
+    const wsUrl = `ws://${hostname}:4545/api/terminal${workspacePath ? `?cwd=${encodeURIComponent(workspacePath)}` : ''}`
     console.log('Connecting to PTY:', wsUrl)
 
     try {

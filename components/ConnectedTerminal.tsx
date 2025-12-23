@@ -22,18 +22,12 @@ const ConnectedTerminal: React.FC<ConnectedTerminalProps> = ({
       setConnectionState('connecting');
       setErrorMessage('');
 
-      const port = await window.electronAPI?.pty?.getPort();
-      if (!port) {
-        setConnectionState('error');
-        setErrorMessage('PTY server not available');
-        return;
-      }
-
       const cols = terminalRef.current?.terminal?.cols || 80;
       const rows = terminalRef.current?.terminal?.rows || 24;
       const encodedCwd = encodeURIComponent(cwd);
       
-      const ws = new WebSocket(`ws://127.0.0.1:${port}?cols=${cols}&rows=${rows}&cwd=${encodedCwd}`);
+      const hostname = window.location.hostname;
+      const ws = new WebSocket(`ws://${hostname}:4545/api/terminal?cols=${cols}&rows=${rows}&cwd=${encodedCwd}`);
       wsRef.current = ws;
 
       ws.onopen = () => {
