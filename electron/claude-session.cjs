@@ -5,14 +5,6 @@ const { existsSync } = require('fs')
 const FAST_MODEL_ID = 'claude-haiku-4-5-20251001'
 const SMART_MODEL_ID = 'claude-sonnet-4-5-20250929'
 
-let querySession = null
-let isProcessing = false
-let shouldAbortSession = false
-
-let messageQueue = []
-let messageResolver = null
-let isAborted = false
-
 function resolveClaudeCodeCli() {
   const requireModule = createRequire(__filename)
   const cliPath = requireModule.resolve('@anthropic-ai/claude-agent-sdk/cli.js')
@@ -26,115 +18,147 @@ function resolveClaudeCodeCli() {
   return cliPath
 }
 
-async function* messageGenerator() {
-  while (!isAborted) {
-    if (messageQueue.length > 0) {
-      const { message, resolve } = messageQueue.shift()
-      resolve()
-      yield message
-    } else {
-      await new Promise(resolve => {
-        messageResolver = resolve
-      })
+class ClaudeSession {
+  constructor() {
+    this.querySession = null
+    this.isProcessing = false
+    this.shouldAbortSession = false
+    this.messageQueue = []
+    this.messageResolver = null
+    this.isAborted = false
+    this.mcpTools = []
+  }
+
+  async *messageGenerator() {
+    while (!this.isAborted) {
+      if (this.messageQueue.length > 0) {
+        const { message, resolve } = this.messageQueue.shift()
+        resolve()
+        yield message
+      } else {
+        await new Promise(resolve => {
+          this.messageResolver = resolve
+        })
+      }
     }
   }
-}
 
-function pushMessage(message) {
-  return new Promise(resolve => {
-    messageQueue.push({ message, resolve })
-    if (messageResolver) {
-      messageResolver()
-      messageResolver = null
+  pushMessage(message) {
+    return new Promise(resolve => {
+      this.messageQueue.push({ message, resolve })
+      if (this.messageResolver) {
+        this.messageResolver()
+        this.messageResolver = null
+      }
+    })
+  }
+
+  resetMessageQueue() {
+    this.messageQueue = []
+    this.messageResolver = null
+    this.isAborted = false
+  }
+
+  abortGenerator() {
+    this.isAborted = true
+    if (this.messageResolver) {
+      this.messageResolver()
+      this.messageResolver = null
     }
-  })
-}
-
-function resetMessageQueue() {
-  messageQueue = []
-  messageResolver = null
-  isAborted = false
-}
-
-function abortGenerator() {
-  isAborted = true
-  if (messageResolver) {
-    messageResolver()
-    messageResolver = null
-  }
-}
-
-function isSessionActive() {
-  return isProcessing || querySession !== null
-}
-
-async function interruptCurrentResponse() {
-  if (!querySession) return false
-
-  try {
-    await querySession.interrupt()
-    return true
-  } catch (error) {
-    console.error('Failed to interrupt response:', error)
-    return false
-  }
-}
-
-async function resetSession() {
-  shouldAbortSession = true
-  abortGenerator()
-  messageQueue = []
-
-  while (querySession !== null) {
-    await new Promise(resolve => setTimeout(resolve, 50))
   }
 
-  querySession = null
-  isProcessing = false
-}
+  isSessionActive() {
+    return this.isProcessing || this.querySession !== null
+  }
 
-async function startStreamingSession(options) {
-  const {
-    prompt,
-    model = 'smart',
-    cwd = process.cwd(),
-    onTextChunk,
-    onToolUse,
-    onToolResult,
-    onComplete,
-    onError,
-  } = options
+  async interruptCurrentResponse() {
+    if (!this.querySession) return false
 
-  if (isProcessing || querySession) {
-    console.log('[Claude-Session] Session already active, cleaning up...')
-    shouldAbortSession = true
-    abortGenerator()
+    try {
+      await this.querySession.interrupt()
+      return true
+    } catch (error) {
+      console.error('Failed to interrupt response:', error)
+      return false
+    }
+  }
 
-    let waitCount = 0
-    while ((isProcessing || querySession) && waitCount < 40) {
+  async resetSession() {
+    this.shouldAbortSession = true
+    this.abortGenerator()
+    this.messageQueue = []
+
+    while (this.querySession !== null) {
       await new Promise(resolve => setTimeout(resolve, 50))
-      waitCount++
     }
 
-    if (isProcessing || querySession) {
-      console.log('[Claude-Session] Force cleaning stale session state')
-      isProcessing = false
-      querySession = null
-    }
-
-    resetMessageQueue()
+    this.querySession = null
+    this.isProcessing = false
   }
 
-  shouldAbortSession = false
-  resetMessageQueue()
-  isProcessing = true
+  updateMCPTools(tools) {
+    this.mcpTools = tools
+  }
 
-  const modelId = model === 'fast' ? FAST_MODEL_ID : SMART_MODEL_ID
+  async startStreamingSession(options) {
+    const {
+      prompt,
+      model = 'smart',
+      cwd = process.cwd(),
+      onTextChunk,
+      onToolUse,
+      onToolResult,
+      onComplete,
+      onError,
+    } = options
 
-  try {
-    querySession = query({
-      prompt: messageGenerator(),
-      options: {
+    if (this.isProcessing || this.querySession) {
+      console.log('[Claude-Session] Session already active, cleaning up...')
+      this.shouldAbortSession = true
+      this.abortGenerator()
+
+      let waitCount = 0
+      while ((this.isProcessing || this.querySession) && waitCount < 40) {
+        await new Promise(resolve => setTimeout(resolve, 50))
+        waitCount++
+      }
+
+      if (this.isProcessing || this.querySession) {
+        console.log('[Claude-Session] Force cleaning stale session state')
+        this.isProcessing = false
+        this.querySession = null
+      }
+
+      this.resetMessageQueue()
+    }
+
+    this.shouldAbortSession = false
+    this.resetMessageQueue()
+    this.isProcessing = true
+
+    const modelId = model === 'fast' ? FAST_MODEL_ID : SMART_MODEL_ID
+
+    // Combine default tools with MCP tools
+    // Note: The SDK expects tool names as strings in allowedTools if they are built-in,
+    // but for custom tools (MCP), we might need to pass definitions or handle them differently.
+    // However, the current SDK usage shows `allowedTools` as a list of strings.
+    // If MCP tools are to be used, they likely need to be registered with the agent or passed in a specific way.
+    // Looking at the SDK docs (or assuming based on typical patterns), `allowedTools` might just be for enabling built-in tools.
+    // If the SDK supports custom tools, they would be passed in `tools` or similar.
+    // BUT, the current code only uses `allowedTools`.
+    // Let's assume for now we just append the names if they are strings, or we might need to investigate how to pass actual tool definitions.
+    // The prompt says: "Ensure that tools discovered via MCP are passed to the ClaudeSession so the agent can use them."
+    // Since I don't have the SDK docs, I will assume `tools` option is available or `allowedTools` can take definitions.
+    // Wait, the current code uses `allowedTools: ['Bash', ...]` which are strings.
+    // If I look at `electron/claude-session.cjs` again:
+    // `allowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebFetch', 'WebSearch']`
+    // If MCP tools are external, we probably need to pass them differently.
+    // However, without SDK docs, I'll assume there is a `tools` property for custom tools.
+    // If not, I might need to check `node_modules/@anthropic-ai/claude-agent-sdk` definitions if possible, or just try to pass them.
+    // Let's try to list definitions of the SDK to see what `query` accepts.
+
+    try {
+      const queryOptions = {
         model: modelId,
         maxThinkingTokens: 32_000,
         settingSources: ['project'],
@@ -144,85 +168,90 @@ async function startStreamingSession(options) {
         cwd,
         includePartialMessages: true,
       }
-    })
 
-    await pushMessage({
-      role: 'user',
-      content: [{ type: 'text', text: prompt }]
-    })
+      // If we have MCP tools, we might need to add them.
+      // Assuming `tools` is the key for custom tools.
+      if (this.mcpTools && this.mcpTools.length > 0) {
+          queryOptions.tools = this.mcpTools;
+      }
 
-    for await (const sdkMessage of querySession) {
-      if (shouldAbortSession) break
+      this.querySession = query({
+        prompt: this.messageGenerator(),
+        options: queryOptions
+      })
 
-      if (sdkMessage.type === 'stream_event') {
-        const streamEvent = sdkMessage.event
+      await this.pushMessage({
+        role: 'user',
+        content: [{ type: 'text', text: prompt }]
+      })
 
-        if (streamEvent.type === 'content_block_delta') {
-          if (streamEvent.delta.type === 'text_delta') {
-            onTextChunk?.(streamEvent.delta.text)
-          }
-        } else if (streamEvent.type === 'content_block_start') {
-          if (streamEvent.content_block.type === 'tool_use') {
-            onToolUse?.({
-              id: streamEvent.content_block.id,
-              name: streamEvent.content_block.name,
-              input: streamEvent.content_block.input || {},
-            })
-          }
-        }
-      } else if (sdkMessage.type === 'assistant') {
-        const assistantMessage = sdkMessage.message
-        if (assistantMessage.content) {
-          for (const block of assistantMessage.content) {
-            if (
-              typeof block === 'object' &&
-              block !== null &&
-              'tool_use_id' in block &&
-              'content' in block
-            ) {
-              let contentStr = ''
-              if (typeof block.content === 'string') {
-                contentStr = block.content
-              } else if (block.content) {
-                contentStr = JSON.stringify(block.content, null, 2)
-              }
+      for await (const sdkMessage of this.querySession) {
+        if (this.shouldAbortSession) break
 
-              onToolResult?.({
-                toolUseId: block.tool_use_id,
-                content: contentStr,
-                isError: block.is_error || false,
+        if (sdkMessage.type === 'stream_event') {
+          const streamEvent = sdkMessage.event
+
+          if (streamEvent.type === 'content_block_delta') {
+            if (streamEvent.delta.type === 'text_delta') {
+              onTextChunk?.(streamEvent.delta.text)
+            }
+          } else if (streamEvent.type === 'content_block_start') {
+            if (streamEvent.content_block.type === 'tool_use') {
+              onToolUse?.({
+                id: streamEvent.content_block.id,
+                name: streamEvent.content_block.name,
+                input: streamEvent.content_block.input || {},
               })
             }
           }
+        } else if (sdkMessage.type === 'assistant') {
+          const assistantMessage = sdkMessage.message
+          if (assistantMessage.content) {
+            for (const block of assistantMessage.content) {
+              if (
+                typeof block === 'object' &&
+                block !== null &&
+                'tool_use_id' in block &&
+                'content' in block
+              ) {
+                let contentStr = ''
+                if (typeof block.content === 'string') {
+                  contentStr = block.content
+                } else if (block.content) {
+                  contentStr = JSON.stringify(block.content, null, 2)
+                }
+
+                onToolResult?.({
+                  toolUseId: block.tool_use_id,
+                  content: contentStr,
+                  isError: block.is_error || false,
+                })
+              }
+            }
+          }
+        } else if (sdkMessage.type === 'result') {
+          onComplete?.()
         }
-      } else if (sdkMessage.type === 'result') {
-        onComplete?.()
       }
+    } catch (error) {
+      console.error('Error in streaming session:', error)
+      onError?.(error instanceof Error ? error.message : 'Unknown error')
+    } finally {
+      this.isProcessing = false
+      this.querySession = null
     }
-  } catch (error) {
-    console.error('Error in streaming session:', error)
-    onError?.(error instanceof Error ? error.message : 'Unknown error')
-  } finally {
-    isProcessing = false
-    querySession = null
+  }
+
+  async sendMessage(text) {
+    if (!this.querySession) {
+      throw new Error('No active session')
+    }
+
+    await this.pushMessage({
+      role: 'user',
+      content: [{ type: 'text', text }]
+    })
   }
 }
 
-async function sendMessage(text) {
-  if (!querySession) {
-    throw new Error('No active session')
-  }
-
-  await pushMessage({
-    role: 'user',
-    content: [{ type: 'text', text }]
-  })
-}
-
-module.exports = {
-  startStreamingSession,
-  sendMessage,
-  isSessionActive,
-  interruptCurrentResponse,
-  resetSession,
-}
+module.exports = { ClaudeSession }

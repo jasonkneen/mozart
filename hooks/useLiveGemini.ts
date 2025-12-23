@@ -3,7 +3,7 @@ import { GoogleGenAI, Modality, LiveServerMessage, FunctionDeclaration, Type } f
 import { createAudioBlob, base64ToArrayBuffer, pcmToAudioBuffer } from '../utils/audio';
 import { StreamState, SelectedElement } from '../types';
 import { voiceLogger } from '../utils/voiceLogger';
-import { debugLog, debug } from '../utils/debug';
+import { debugLog } from '../utils/debug';
 import { executeToolCalls, ToolCall, ToolHandlers, ToolResponse } from '../utils/toolRouter';
 
 interface UseLiveGeminiParams {
@@ -969,7 +969,7 @@ BE INSTANT. BE SILENT. ACT FIRST.`,
         },
         callbacks: {
           onopen: () => {
-            debug("Connection Opened");
+            debugLog.liveGemini.log("Connection Opened");
             debugLog.liveGemini.log('Gemini Live connection opened successfully');
             debugLog.liveGemini.log('Input AudioContext state:', inputAudioContextRef.current?.state);
             debugLog.liveGemini.log('Media stream tracks:', mediaStreamRef.current?.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, muted: t.muted })));
@@ -1150,7 +1150,7 @@ BE INSTANT. BE SILENT. ACT FIRST.`,
             }
           },
           onclose: () => {
-            debug("Connection Closed");
+            debugLog.liveGemini.log("Connection Closed");
             debugLog.liveGemini.log('Stream closed');
 
             // Clean up audio processing to stop "WebSocket closed" errors

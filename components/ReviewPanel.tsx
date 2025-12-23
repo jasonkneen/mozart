@@ -98,6 +98,7 @@ const ReviewPanel: React.FC<ReviewPanelProps> = ({
   const handleAiReview = async () => {
     setIsAnalyzing(true);
     // Simulate AI analysis
+    // TODO: Connect to backend AI service for real analysis
     await new Promise(resolve => setTimeout(resolve, 2000));
     setAiSuggestions([
       'Consider adding error boundaries around async operations',

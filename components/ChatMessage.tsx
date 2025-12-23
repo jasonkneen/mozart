@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { User, Sparkles, Terminal, Copy, Check, Wrench } from 'lucide-react';
+import { User, Sparkles, Terminal, Copy, Check, Wrench, Clock } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Message, ToolUsage } from '../types';
 import { MessageActions } from './MessageActions';
-import { CodeBlock } from './ai-elements/code-block';
+import { CodeBlock } from './CodeBlock';
 import { Button } from './ui/button';
+import { PlanProgress } from './PlanProgress';
 
 export interface ChatMessageProps {
   message: Message;
@@ -235,9 +236,17 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
         <div className="flex-grow min-w-0 space-y-2">
             <div className="flex items-center justify-between h-8">
-                <span className="text-sm font-medium text-neutral-300">
-                    {isUser ? 'You' : 'Cluso AI'}
-                </span>
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-neutral-300">
+                        {isUser ? 'You' : 'Cluso AI'}
+                    </span>
+                    {message.duration !== undefined && (
+                        <div className="flex items-center gap-1 text-xs text-neutral-500" title="Response time">
+                            <Clock className="w-3 h-3" />
+                            <span>{message.duration}s</span>
+                        </div>
+                    )}
+                </div>
                 
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1">
                     <Button
@@ -261,6 +270,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                 "text-[15px] leading-7 text-neutral-300",
                 isStreaming && isLast && "animate-pulse-subtle"
             )}>
+                {message.plan && (
+                    <PlanProgress plan={message.plan} />
+                )}
+
                 {message.toolUsage && message.toolUsage.length > 0 && (
                     <ToolUsageBlock tools={message.toolUsage} />
                 )}

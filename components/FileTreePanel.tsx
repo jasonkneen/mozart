@@ -9,7 +9,7 @@ import {
   FileImage,
   FileText
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
 
 export type GitStatus = 'M' | 'A' | 'D' | 'U';

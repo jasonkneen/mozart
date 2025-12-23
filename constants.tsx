@@ -15,3 +15,5 @@ Available Trace Types: Thinking, Lint, Edit, Bash, Read, Plan.
 Format your response with a clear 'Summary' header.
 Use Markdown for rich text.
 When proposing a plan, use the 'Plan' trace type to describe steps.`;
+
+export const MOCK_FILE_TREE = [];

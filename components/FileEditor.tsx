@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { Save, Copy, Check, RefreshCw, Undo, ZoomIn, ZoomOut, Eye, Code, Play, Pause, Volume2, VolumeX, Maximize, RotateCcw, WrapText } from 'lucide-react'
 import CodeMirror from '@uiw/react-codemirror'
 import { EditorView } from '@codemirror/view'
+import { Extension } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { javascript } from '@codemirror/lang-javascript'
 import { python } from '@codemirror/lang-python'
@@ -688,7 +689,7 @@ const FileEditor = ({
   const langExtension = getLanguageExtension(fileName)
 
   // Build extensions array with optional word wrap
-  const extensions = [langExtension]
+  const extensions: Extension[] = [langExtension]
   if (wordWrap) {
     extensions.push(EditorView.lineWrapping)
   }

@@ -1,4 +1,4 @@
-/// <reference path="../types/electron.d.ts" />
+/// <reference path="../electron.d.ts" />
 import { useState, useCallback } from 'react'
 
 interface GitResult<T = unknown> {

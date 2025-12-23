@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { z } from 'zod'
 import type {
   MCPServerConfig,
   MCPServerState,
@@ -15,7 +16,7 @@ import type {
   ToolUsageStats,
   IndexHealthStatus,
 } from '../types/mcp'
-import { jsonSchemaToZod as sharedJsonSchemaToZod } from '../utils/zodSchema'
+import { jsonSchemaToZod as sharedJsonSchemaToZod } from '../lib/zodSchema'
 import {
   discoverMCPServers,
   mergeServerConfigs,
@@ -132,6 +133,48 @@ export function useMCP(options: UseMCPOptions = {}): UseMCPReturn {
   useEffect(() => {
     setIsAvailable(!!window.electronAPI?.mcp)
   }, [])
+
+  // Sync with backend connections
+  useEffect(() => {
+    if (!window.electronAPI?.mcp?.getConnections) return;
+
+    const syncConnections = async () => {
+      try {
+        const result = await window.electronAPI.mcp.getConnections();
+        if (result.success && result.connections) {
+          setServers(prev => {
+            const updated = { ...prev };
+            // Mark existing as connected
+            for (const conn of result.connections) {
+              if (updated[conn.id]) {
+                updated[conn.id] = {
+                  ...updated[conn.id],
+                  status: 'connected',
+                  lastConnected: Date.now()
+                };
+              } else {
+                // If we don't have config for this connection, we can't really add it fully
+                // But we can add a placeholder
+                updated[conn.id] = {
+                  config: { id: conn.id, name: conn.id, command: '', args: [], enabled: true },
+                  status: 'connected',
+                  tools: [],
+                  resources: [],
+                  prompts: [],
+                  lastConnected: Date.now()
+                };
+              }
+            }
+            return updated;
+          });
+        }
+      } catch (e) {
+        console.error('Failed to sync MCP connections:', e);
+      }
+    };
+
+    syncConnections();
+  }, [isAvailable]);
 
   // Subscribe to MCP events from Electron
   useEffect(() => {
@@ -617,9 +660,6 @@ export function mcpToolsToAISDK(
   tools: Array<MCPTool & { serverId: string }>,
   callTool: (serverId: string, toolName: string, args: Record<string, unknown>) => Promise<MCPToolResult>
 ) {
-  // Import zod dynamically to avoid module resolution issues
-  const { z } = require('zod')
-
   const result: Record<string, {
     description: string
     parameters: unknown

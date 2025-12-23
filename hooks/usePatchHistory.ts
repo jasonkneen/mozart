@@ -90,7 +90,7 @@ export function usePatchHistory(): UsePatchHistoryReturn {
       setLoading(true)
       const result = await api.getStatus(filePath)
       if (result.success) {
-        setStatus(result as PatchHistoryStatus)
+        setStatus(result.status as PatchHistoryStatus)
         setError(null)
       } else {
         setError(result.error || 'Failed to get status')

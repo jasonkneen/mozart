@@ -7,7 +7,7 @@ import { useCallback, useMemo, useRef } from 'react'
 import { useElectronAPI } from './useElectronAPI'
 
 // Re-export types from electron.d.ts for convenience
-export type { LSPHoverResult, LSPCompletionItem, LSPLocation, LSPDiagnostic } from '../types/electron.d'
+export type { LSPHoverResult, LSPCompletionItem, LSPLocation, LSPDiagnostic } from '../electron.d'
 
 /**
  * LSP feature hook for editor-like functionality

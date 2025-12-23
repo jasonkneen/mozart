@@ -4,115 +4,17 @@ import {
   User, GitBranch, Box, Terminal, Cpu, Zap, ExternalLink,
   Palette, ChevronDown, MessageSquare, History, FileJson,
   Info, Key, LogOut, Check, Save, AlertCircle, Moon, Sun,
-  Volume2, Bell, Eye, Code, Keyboard, Globe, Shield, Link, Unlink, Plus, X
+  Volume2, Bell, Eye, Code, Keyboard, Globe, Shield, Link, Unlink, Plus, X,
+  Server, Plug, Trash2, RefreshCw
 } from 'lucide-react';
 import { oauthService } from '../services/oauthService';
+import useMCP from '../hooks/useMCP';
+import { useSettings, Settings } from '../hooks/useSettings';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
-
-// Settings state type
-interface Settings {
-  chat: {
-    defaultModel: string;
-    desktopNotifications: boolean;
-    soundEnabled: boolean;
-    showThinking: boolean;
-    streamResponses: boolean;
-  };
-  appearance: {
-    theme: 'dark' | 'light' | 'system';
-    monoFont: string;
-    monoFontSize: number;
-    appFont: string;
-    appFontSize: number;
-    accentColor: string;
-  };
-  git: {
-    autoStage: boolean;
-    autoCommit: boolean;
-    defaultBranch: string;
-    signCommits: boolean;
-    gpgKey: string;
-  };
-  env: {
-    anthropicApiKey: string;
-    useBedrock: boolean;
-    awsRegion: string;
-    openaiApiKey: string;
-    customVars: Array<{ name: string; value: string }>;
-  };
-  claude: {
-    maxTokens: number;
-    temperature: number;
-    toolsEnabled: boolean;
-    permissionMode: 'ask' | 'auto' | 'deny';
-  };
-  account: {
-    email: string;
-    plan: string;
-    usage: number;
-    limit: number;
-  };
-  experimental: {
-    enableAgentMode: boolean;
-    parallelTools: boolean;
-    ultraThinking: boolean;
-    mcpServers: boolean;
-  };
-}
-
-const defaultSettings: Settings = {
-  chat: {
-    defaultModel: 'sonnet',
-    desktopNotifications: true,
-    soundEnabled: false,
-    showThinking: true,
-    streamResponses: true,
-  },
-  appearance: {
-    theme: 'dark',
-    monoFont: 'Geist Mono',
-    monoFontSize: 13,
-    appFont: 'Inter',
-    appFontSize: 14,
-    accentColor: '#3B82F6',
-  },
-  git: {
-    autoStage: true,
-    autoCommit: false,
-    defaultBranch: 'main',
-    signCommits: false,
-    gpgKey: '',
-  },
-  env: {
-    anthropicApiKey: '',
-    useBedrock: false,
-    awsRegion: 'us-east-1',
-    openaiApiKey: '',
-    customVars: [],
-  },
-  claude: {
-    maxTokens: 8192,
-    temperature: 0.7,
-    toolsEnabled: true,
-    permissionMode: 'ask',
-  },
-  account: {
-    email: '',
-    plan: 'Pro',
-    usage: 0,
-    limit: 100000,
-  },
-  experimental: {
-    enableAgentMode: true,
-    parallelTools: true,
-    ultraThinking: false,
-    mcpServers: true,
-  },
-};
 
 const Toggle: React.FC<{ enabled: boolean; onChange: (v: boolean) => void }> = ({ enabled, onChange }) => (
   <button
@@ -133,11 +35,45 @@ type VerifyStatus = 'idle' | 'verifying' | 'success' | 'error';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState('chat');
-  const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const { settings, updateSettings } = useSettings();
   const [anthropicVerify, setAnthropicVerify] = useState<VerifyStatus>('idle');
   const [openaiVerify, setOpenaiVerify] = useState<VerifyStatus>('idle');
   const [claudeConnected, setClaudeConnected] = useState(false);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [newServer, setNewServer] = useState({ name: '', command: '', args: '' });
+
+  const { servers, connect, disconnect, addServer, removeServer, isConnecting } = useMCP({
+    initialServers: settings.experimental.configuredServers || [],
+    autoConnect: false
+  });
+
+  const handleAddServer = () => {
+    if (!newServer.name || !newServer.command) return;
+    const config = {
+      id: newServer.name.toLowerCase().replace(/\s+/g, '-'),
+      name: newServer.name,
+      command: newServer.command,
+      args: newServer.args.split(' ').filter(Boolean),
+      enabled: true
+    };
+    addServer(config);
+    const updatedServers = [...(settings.experimental.configuredServers || []), config];
+    updateSettings('experimental', 'configuredServers', updatedServers);
+    setNewServer({ name: '', command: '', args: '' });
+  };
+
+  const handleRemoveServer = async (id: string) => {
+    await removeServer(id);
+    const updatedServers = (settings.experimental.configuredServers || []).filter((s: any) => s.id !== id);
+    updateSettings('experimental', 'configuredServers', updatedServers);
+  };
+
+  const handleConnectServer = async (id: string) => {
+    const server = servers[id];
+    if (server) {
+      await connect(server.config);
+    }
+  };
 
   // Check Claude OAuth status
   useEffect(() => {
@@ -224,18 +160,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     setTimeout(() => setOpenaiVerify('idle'), 3000);
   };
 
-  // Load settings from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('mozart-settings');
-    if (saved) {
-      try {
-        setSettings({ ...defaultSettings, ...JSON.parse(saved) });
-      } catch {
-        // Use defaults
-      }
-    }
-  }, []);
-
   // Handle Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -246,23 +170,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
-
-  const updateSettings = <K extends keyof Settings>(
-    category: K,
-    key: keyof Settings[K],
-    value: Settings[K][keyof Settings[K]]
-  ) => {
-    const newSettings = {
-      ...settings,
-      [category]: {
-        ...settings[category],
-        [key]: value
-      }
-    };
-    setSettings(newSettings);
-    // Auto-save immediately
-    localStorage.setItem('mozart-settings', JSON.stringify(newSettings));
-  };
 
   if (!isOpen) return null;
 
@@ -280,6 +187,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     {
       title: 'More',
       items: [
+        { id: 'mcp', label: 'MCP Servers', icon: <Server size={16} /> },
         { id: 'experimental', label: 'Experimental', icon: <Zap size={16} /> },
         { id: 'keyboard', label: 'Keyboard Shortcuts', icon: <Keyboard size={16} /> },
         { id: 'feedback', label: 'Feedback', icon: <MessageSquare size={16} />, external: true },
@@ -752,6 +660,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
               <div className="flex items-center justify-between py-4 border-b border-white/5">
                 <div>
+                  <h3 className="text-base font-semibold text-white">Top P</h3>
+                  <p className="text-sm text-white/50 mt-1">Nucleus sampling (0.1 = focused, 1 = diverse)</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="1"
+                    step="0.1"
+                    value={settings.claude.topP ?? 1.0}
+                    onChange={(e) => updateSettings('claude', 'topP', Number(e.target.value))}
+                    className="w-32"
+                  />
+                  <span className="text-base text-white/60 w-12">{settings.claude.topP ?? 1.0}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between py-4 border-b border-white/5">
+                <div>
                   <h3 className="text-base font-semibold text-white">Enable Tools</h3>
                   <p className="text-sm text-white/50 mt-1">Allow Claude to use Bash, Edit, Read tools</p>
                 </div>
@@ -893,6 +820,156 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           </div>
         )}
 
+        {/* MCP Servers */}
+        {activeTab === 'mcp' && (
+          <div className="space-y-8 animate-in fade-in slide-in-from-right-4">
+            <div className="flex items-center justify-between">
+              <h1 className="text-2xl font-bold text-white">MCP Servers</h1>
+              <button
+                onClick={() => {
+                  // Refresh logic if needed
+                }}
+                className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+              >
+                <RefreshCw size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Add Server Form */}
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-4">
+                <h3 className="text-base font-semibold text-white">Add Server</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs text-white/40 uppercase tracking-wider">Name</label>
+                    <input
+                      type="text"
+                      value={newServer.name}
+                      onChange={(e) => setNewServer({ ...newServer, name: e.target.value })}
+                      placeholder="e.g. Postgres"
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs text-white/40 uppercase tracking-wider">Command</label>
+                    <input
+                      type="text"
+                      value={newServer.command}
+                      onChange={(e) => setNewServer({ ...newServer, command: e.target.value })}
+                      placeholder="e.g. npx"
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/40 uppercase tracking-wider">Arguments</label>
+                  <input
+                    type="text"
+                    value={newServer.args}
+                    onChange={(e) => setNewServer({ ...newServer, args: e.target.value })}
+                    placeholder="e.g. -y @modelcontextprotocol/server-postgres postgresql://localhost/db"
+                    className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-white/20 font-mono"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleAddServer}
+                    disabled={!newServer.name || !newServer.command}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Plus size={14} />
+                    Add Server
+                  </button>
+                </div>
+              </div>
+
+              {/* Server List */}
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest">Configured Servers</h3>
+                {Object.values(servers).length === 0 ? (
+                  <div className="text-center py-8 text-white/30 text-sm border border-dashed border-white/10 rounded-xl">
+                    No servers configured
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {Object.values(servers).map((server) => (
+                      <div key={server.config.id} className="bg-white/5 border border-white/10 rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-2 h-2 rounded-full ${
+                              server.status === 'connected' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' :
+                              server.status === 'connecting' ? 'bg-yellow-500 animate-pulse' :
+                              server.status === 'error' ? 'bg-red-500' :
+                              'bg-white/20'
+                            }`} />
+                            <div>
+                              <h4 className="text-base font-medium text-white">{server.config.name}</h4>
+                              <div className="flex items-center gap-2 text-xs text-white/40">
+                                <code className="bg-black/20 px-1.5 py-0.5 rounded">{server.config.command}</code>
+                                <span>{server.status}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {server.status === 'connected' ? (
+                              <button
+                                onClick={() => disconnect(server.config.id)}
+                                className="p-2 text-white/40 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                                title="Disconnect"
+                              >
+                                <Unlink size={16} />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleConnectServer(server.config.id)}
+                                disabled={server.status === 'connecting'}
+                                className="p-2 text-white/40 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                                title="Connect"
+                              >
+                                <Plug size={16} />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleRemoveServer(server.config.id)}
+                              className="p-2 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                              title="Remove"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {server.error && (
+                          <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-300 font-mono break-all">
+                            {server.error}
+                          </div>
+                        )}
+
+                        {server.status === 'connected' && (
+                          <div className="mt-3 pt-3 border-t border-white/5 grid grid-cols-3 gap-4">
+                            <div>
+                              <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1">Tools</div>
+                              <div className="text-lg font-mono text-white/80">{server.tools.length}</div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1">Resources</div>
+                              <div className="text-lg font-mono text-white/80">{server.resources.length}</div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1">Prompts</div>
+                              <div className="text-lg font-mono text-white/80">{server.prompts.length}</div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Experimental Settings */}
         {activeTab === 'experimental' && (
           <div className="space-y-8 animate-in fade-in slide-in-from-right-4">
@@ -933,17 +1010,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <Toggle
                   enabled={settings.experimental.ultraThinking}
                   onChange={(v) => updateSettings('experimental', 'ultraThinking', v)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between py-4">
-                <div>
-                  <h3 className="text-base font-semibold text-white">MCP Servers</h3>
-                  <p className="text-sm text-white/50 mt-1">Enable Model Context Protocol servers</p>
-                </div>
-                <Toggle
-                  enabled={settings.experimental.mcpServers}
-                  onChange={(v) => updateSettings('experimental', 'mcpServers', v)}
                 />
               </div>
             </div>

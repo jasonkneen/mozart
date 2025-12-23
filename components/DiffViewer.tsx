@@ -7,18 +7,53 @@ import {
 } from 'lucide-react';
 
 interface DiffViewerProps {
-  diff: FileDiff;
+  diff?: FileDiff;
   hunks?: DiffHunk[];
+  rawDiff?: string;
+  path?: string;
   onClose?: () => void;
 }
 
 type ViewMode = 'split' | 'unified';
 
-const DiffViewer: React.FC<DiffViewerProps> = ({ diff, hunks = [], onClose }) => {
+const DiffViewer: React.FC<DiffViewerProps> = ({ diff, hunks = [], rawDiff, path, onClose }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('unified');
   const [expandedHunks, setExpandedHunks] = useState<Set<number>>(new Set([0]));
   const [copied, setCopied] = useState(false);
   const [showLineNumbers, setShowLineNumbers] = useState(true);
+
+  const { activeDiff, activeHunks } = useMemo(() => {
+    if (rawDiff) {
+      const lines = rawDiff.split('\n');
+      const parsedHunks: DiffHunk[] = [];
+      let currentHunk: DiffHunk | null = null;
+      let added = 0;
+      let removed = 0;
+      
+      lines.forEach(line => {
+        if (line.startsWith('@@')) {
+          if (currentHunk) parsedHunks.push(currentHunk);
+          currentHunk = { header: line, lines: [] };
+        } else if (currentHunk) {
+          currentHunk.lines.push(line);
+          if (line.startsWith('+') && !line.startsWith('+++')) added++;
+          if (line.startsWith('-') && !line.startsWith('---')) removed++;
+        }
+      });
+      if (currentHunk) parsedHunks.push(currentHunk);
+      
+      const derivedDiff: FileDiff = {
+        path: path || 'diff',
+        added,
+        removed,
+        status: 'modified'
+      };
+      return { activeDiff: derivedDiff, activeHunks: parsedHunks };
+    }
+    return { activeDiff: diff!, activeHunks: hunks };
+  }, [rawDiff, diff, hunks, path]);
+
+  if (!activeDiff) return null;
 
   const toggleHunk = (index: number) => {
     const newExpanded = new Set(expandedHunks);
@@ -31,7 +66,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({ diff, hunks = [], onClose }) =>
   };
 
   const handleCopyPath = async () => {
-    await navigator.clipboard.writeText(diff.path);
+    await navigator.clipboard.writeText(activeDiff.path);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -82,13 +117,13 @@ const DiffViewer: React.FC<DiffViewerProps> = ({ diff, hunks = [], onClose }) =>
   };
 
   return (
-    <div className="flex flex-col h-full bg-surface text-primary">
+    <div className="flex flex-col h-full bg-surface text-primary rounded-lg border border-white/10 overflow-hidden my-2">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+      <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between bg-white/5">
         <div className="flex items-center gap-3">
-          <FileCode size={16} className={statusColors[diff.status]} />
+          <FileCode size={16} className={statusColors[activeDiff.status]} />
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-white/80 font-mono">{diff.path}</span>
+            <span className="text-sm font-medium text-white/80 font-mono">{activeDiff.path}</span>
             <button
               onClick={handleCopyPath}
               className="p-1 text-white/20 hover:text-white/60 transition-colors"
@@ -101,8 +136,8 @@ const DiffViewer: React.FC<DiffViewerProps> = ({ diff, hunks = [], onClose }) =>
 
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-xs">
-            <span className="text-green-400">+{diff.added}</span>
-            <span className="text-red-400">-{diff.removed}</span>
+            <span className="text-green-400">+{activeDiff.added}</span>
+            <span className="text-red-400">-{activeDiff.removed}</span>
           </div>
 
           <div className="flex items-center gap-1 bg-white/5 rounded-lg p-0.5">
@@ -137,14 +172,14 @@ const DiffViewer: React.FC<DiffViewerProps> = ({ diff, hunks = [], onClose }) =>
       </div>
 
       {/* Diff Content */}
-      <div className="flex-1 overflow-auto">
-        {hunks.length === 0 ? (
+      <div className="flex-1 overflow-auto max-h-[400px]">
+        {activeHunks.length === 0 ? (
           <div className="p-8 text-center text-white/40 text-sm">
             No diff data available. File may be binary or unchanged.
           </div>
         ) : (
           <div className="font-mono text-xs">
-            {hunks.map((hunk, hunkIndex) => (
+            {activeHunks.map((hunk, hunkIndex) => (
               <div key={hunkIndex} className="border-b border-white/5">
                 {/* Hunk Header */}
                 <button

@@ -832,19 +832,22 @@ const handleRequest = async (req, res) => {
       }
 
       // Map thinking level to max_tokens and thinking budget
-      let maxTokens = 4096;
+      let maxTokens = 8192;
       let thinkingBudget = null;
-      if (body.level === 'Think') {
+      const level = body.level?.toLowerCase();
+
+      if (level === 'low') {
         maxTokens = 8192;
-        thinkingBudget = 4096;
-      }
-      if (body.level === 'Megathink') {
+        thinkingBudget = 2000;
+      } else if (level === 'medium') {
         maxTokens = 16384;
-        thinkingBudget = 8192;
-      }
-      if (body.level === 'Ultrathink') {
+        thinkingBudget = 5000;
+      } else if (level === 'high') {
         maxTokens = 32768;
-        thinkingBudget = 16384;
+        thinkingBudget = 10000;
+      } else if (level === 'megathink') {
+        maxTokens = 64000;
+        thinkingBudget = 30000;
       }
 
       // Select model - claudeCode uses its own model naming
@@ -963,6 +966,8 @@ Be thorough in your analysis. A good plan now saves debugging later.`;
       const streamOptions = {
         model: claudeCode(modelId, modelOptions),
         maxTokens,
+        temperature: body.temperature,
+        topP: body.topP,
         system: isPlanMode ? planModeSystemPrompt : normalSystemPrompt,
         messages: modelMessages,
       };

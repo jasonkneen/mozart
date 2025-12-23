@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
 export enum ThinkingLevel {
-  None = 'None',
-  Think = 'Think',
-  Megathink = 'Megathink'
+  None = 'none',
+  Low = 'low',
+  Medium = 'medium',
+  High = 'high',
+  Megathink = 'megathink'
 }
 
 export type TraceType = 'Thinking' | 'Lint' | 'Edit' | 'Bash' | 'Read' | 'Plan';
@@ -16,6 +18,14 @@ export type ToolTrace = {
   status?: 'completed' | 'running' | 'error';
 };
 
+export type ToolUsage = {
+  id: string;
+  name: string;
+  args: any;
+  result?: any;
+  isError?: boolean;
+};
+
 export type Message = {
   id: string;
   role: 'user' | 'assistant';
@@ -23,6 +33,13 @@ export type Message = {
   timestamp: number;
   level?: ThinkingLevel;
   traces?: ToolTrace[];
+  toolUsage?: ToolUsage[];
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  duration?: number;
   plan?: {
     title: string;
     description: string;
@@ -209,3 +226,24 @@ export type SDKMessagePart =
   | { type: 'reasoning'; reasoning: string }
   | { type: 'tool-invocation'; toolInvocationId: string; toolName: string; args: unknown; state: 'pending' | 'call' | 'result'; result?: unknown }
   | { type: 'source'; source: { type: string; id?: string; url?: string; title?: string } };
+
+export interface SelectedElement {
+  tagName: string;
+  id?: string;
+  className?: string;
+  text?: string;
+  xpath?: string;
+  outerHTML?: string;
+  sourceLocation?: {
+    file: string;
+    line: number;
+    column: number;
+    summary?: string;
+  };
+}
+
+export interface StreamState {
+  isConnected: boolean;
+  isStreaming: boolean;
+  error: string | null;
+}

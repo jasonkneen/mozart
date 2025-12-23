@@ -133,7 +133,7 @@ function TabCustomizePopup({
                 w-6 h-6 rounded-full transition-transform hover:scale-110
                 ${currentColor === c.color ? 'ring-2 ring-offset-2 ring-offset-[#1f1f1f]' : ''}
               `}
-              style={{ backgroundColor: c.color, ringColor: c.color }}
+              style={{ backgroundColor: c.color, '--tw-ring-color': c.color } as React.CSSProperties}
               title={c.label}
             />
           ))}

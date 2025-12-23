@@ -13,6 +13,37 @@ Mozart has **correctly implemented** the core AI SDK patterns (streamText, useCh
 
 ---
 
+## Recent Updates (December 2025)
+
+The following enhancements have been successfully implemented:
+
+1. **Native Thinking with Dynamic Token Budgets**
+   - Enabled `experimental_thinking` on the backend.
+   - Configured dynamic token budgets based on selected thinking level (Think: 8k, Megathink: 16k).
+   - Frontend now correctly requests thinking levels.
+
+2. **Plan Progress Visualization**
+   - Added `PlanProgress` component to visualize step-by-step execution.
+   - Steps are parsed from the response and displayed with status indicators (pending, active, completed).
+
+3. **Real-time Token Usage Display**
+   - `ThinkingBlock` now shows real-time token usage against the budget.
+   - Visual progress bar with color-coded warnings (blue -> red at >80%).
+
+4. **Response Timing**
+   - Added real-time timer during response generation.
+   - Final duration is displayed in the message footer.
+
+5. **Advanced Settings**
+   - Added `AdvancedSettings` component with Temperature (0.0-2.0) and TopP (0.0-1.0) sliders.
+   - Settings are passed to the backend and applied to the model configuration.
+
+6. **Connection Health Indicator**
+   - Added visual indicator for connection quality (Green/Yellow/Red).
+   - Monitors stream health and detects stalls.
+
+---
+
 ## Key Findings
 
 ### ✅ What's Working

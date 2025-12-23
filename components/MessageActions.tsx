@@ -9,13 +9,14 @@ import {
 import { cn } from '../lib/utils';
 
 export interface MessageActionsProps {
-  timestamp: Date;
+  timestamp: Date | number;
   onFork?: () => void;
   isDarkMode: boolean;
 }
 
-export function formatRelativeTime(date: Date): string {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+export function formatRelativeTime(date: Date | number): string {
+  const d = typeof date === 'number' ? new Date(date) : date;
+  const seconds = Math.floor((Date.now() - d.getTime()) / 1000);
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m`;

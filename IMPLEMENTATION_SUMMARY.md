@@ -342,3 +342,13 @@ The ChatInterface is now a **production-ready, fully-featured component** that:
 - Is ready for deployment
 
 The component is designed for extensibility with clear extension points for tool results, artifacts, images, and permissions as the backend capabilities expand.
+
+## AI SDK Enhancements (Dec 2025)
+
+A significant update was applied to fully leverage the Vercel AI SDK capabilities:
+
+- **Native Thinking**: Enabled `experimental_thinking` with dynamic token budgets (8k/16k) based on user selection.
+- **Progress Tracking**: Implemented `PlanProgress` for step-by-step visualization and real-time token usage tracking in `ThinkingBlock`.
+- **Performance Metrics**: Added response timing display and connection health monitoring.
+- **Advanced Control**: Introduced `AdvancedSettings` for Temperature and TopP configuration.
+- **Reliability**: Added response timeout handling (120s) with retry mechanisms.

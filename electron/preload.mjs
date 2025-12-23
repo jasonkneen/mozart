@@ -13,6 +13,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   isElectron: true,
 
+  patchHistory: {
+    getStatus: (filePath) => ipcRenderer.invoke('patchHistory:getStatus', filePath),
+    record: (filePath, beforeContent, afterContent, description, options) =>
+      ipcRenderer.invoke('patchHistory:record', { filePath, beforeContent, afterContent, description, options }),
+    undo: (filePath) => ipcRenderer.invoke('patchHistory:undo', filePath),
+    redo: (filePath) => ipcRenderer.invoke('patchHistory:redo', filePath),
+    createCheckpoint: (filePath, name) => ipcRenderer.invoke('patchHistory:createCheckpoint', { filePath, name }),
+    restoreCheckpoint: (filePath, checkpointId) => ipcRenderer.invoke('patchHistory:restoreCheckpoint', { filePath, checkpointId }),
+    listCheckpoints: (filePath) => ipcRenderer.invoke('patchHistory:listCheckpoints', { filePath }),
+    deleteCheckpoint: (filePath, checkpointId) => ipcRenderer.invoke('patchHistory:deleteCheckpoint', { filePath, checkpointId }),
+    getHistory: (filePath, options) => ipcRenderer.invoke('patchHistory:getHistory', { filePath, options }),
+    clear: (filePath) => ipcRenderer.invoke('patchHistory:clear', filePath),
+  },
+
   claudeCode: {
     startSession: (options) => ipcRenderer.invoke('claude-code:start-session', options),
     sendMessage: (text) => ipcRenderer.invoke('claude-code:send-message', text),

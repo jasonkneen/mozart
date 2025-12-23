@@ -9,6 +9,18 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
   getPath: (name) => electron.ipcRenderer.invoke("app:getPath", name),
   platform: process.platform,
   isElectron: true,
+  patchHistory: {
+    getStatus: (filePath) => electron.ipcRenderer.invoke("patchHistory:getStatus", filePath),
+    record: (filePath, beforeContent, afterContent, description, options) => electron.ipcRenderer.invoke("patchHistory:record", { filePath, beforeContent, afterContent, description, options }),
+    undo: (filePath) => electron.ipcRenderer.invoke("patchHistory:undo", filePath),
+    redo: (filePath) => electron.ipcRenderer.invoke("patchHistory:redo", filePath),
+    createCheckpoint: (filePath, name) => electron.ipcRenderer.invoke("patchHistory:createCheckpoint", { filePath, name }),
+    restoreCheckpoint: (filePath, checkpointId) => electron.ipcRenderer.invoke("patchHistory:restoreCheckpoint", { filePath, checkpointId }),
+    listCheckpoints: (filePath) => electron.ipcRenderer.invoke("patchHistory:listCheckpoints", { filePath }),
+    deleteCheckpoint: (filePath, checkpointId) => electron.ipcRenderer.invoke("patchHistory:deleteCheckpoint", { filePath, checkpointId }),
+    getHistory: (filePath, options) => electron.ipcRenderer.invoke("patchHistory:getHistory", { filePath, options }),
+    clear: (filePath) => electron.ipcRenderer.invoke("patchHistory:clear", filePath)
+  },
   claudeCode: {
     startSession: (options) => electron.ipcRenderer.invoke("claude-code:start-session", options),
     sendMessage: (text) => electron.ipcRenderer.invoke("claude-code:send-message", text),

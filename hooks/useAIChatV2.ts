@@ -85,7 +85,7 @@ export interface UseAIChatOptions {
 
 export interface ToolDefinition {
   description: string
-  parameters: Record<string, unknown>
+  parameters: any
   execute?: (args: unknown) => Promise<unknown>
 }
 

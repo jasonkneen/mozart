@@ -5,7 +5,7 @@ import { atelierSulphurpoolDark } from 'react-syntax-highlighter/dist/esm/styles
 import {
   Send, Paperclip, Sparkles, ChevronDown, Brain, ChevronRight,
   Copy, Check, Zap, ClipboardList, AlertTriangle, Link, ArrowUpRight, Shield, ShieldOff,
-  Reply, X
+  Reply, X, Terminal, Wrench
 } from 'lucide-react'
 const BRAILLE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
@@ -35,9 +35,10 @@ function StreamingIndicator({ startTime, thinkingLevel }: { startTime: number | 
   }, [startTime])
 
   const thinkingLabels: Record<string, string> = {
-    think: 'Thinking',
-    megathink: 'Deep thinking',
-    ultrathink: 'Extended reasoning'
+    low: 'Thinking',
+    medium: 'Deep thinking',
+    high: 'Complex reasoning',
+    megathink: 'Extended reasoning'
   }
 
   return (
@@ -104,6 +105,12 @@ import { useConductorStore } from '../services/store'
 import { InputAutocomplete, AutocompleteItem } from './InputAutocomplete'
 import { ToolApprovalCard } from './ToolApprovalCard'
 import { useToolApproval } from '../hooks/useToolApproval'
+import { useSettings } from '../hooks/useSettings'
+import DiffViewer from './DiffViewer'
+import { CodeBlock } from './CodeBlock'
+import { ThinkingLevel } from '../types'
+import ThinkingToggle from './ThinkingToggle'
+import { PlanProgress } from './PlanProgress'
 
 const API_BASE = (import.meta as any).env?.VITE_CONDUCTOR_API_BASE || '/api'
 
@@ -139,6 +146,16 @@ interface ExtendedMessage {
   duration?: number
   timestamp?: number
   replyToId?: string
+  plan?: {
+    title: string
+    description: string
+    steps: { label: string; details: string; completed: boolean }[]
+  }
+  usage?: {
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+  }
 }
 
 interface ChatInterfaceProps {
@@ -147,6 +164,7 @@ interface ChatInterfaceProps {
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
   const { state } = useConductorStore()
+  const { settings } = useSettings()
   const { activeWorkspaceId, workspaces } = state
   const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId)
 
@@ -158,7 +176,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [selectedModel, setSelectedModel] = useState('sonnet')
   const [input, setInput] = useState('')
-  const [thinkingLevel, setThinkingLevel] = useState<'think' | 'megathink' | 'ultrathink'>('think')
+  const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>(ThinkingLevel.Low)
   const [planMode, setPlanMode] = useState(false)
   const [toolApprovalEnabled, setToolApprovalEnabled] = useState(false) // AI SDK 6.0 human-in-the-loop (disabled by default)
   const [inputFocused, setInputFocused] = useState(false)
@@ -168,6 +186,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
   const [submitTime, setSubmitTime] = useState<number | null>(null)
   const [requestError, setRequestError] = useState<string | null>(null)
   const [replyingTo, setReplyingTo] = useState<{ id: string; content: string; role: string } | null>(null)
+  const [lastUsage, setLastUsage] = useState<{ promptTokens: number; completionTokens: number; totalTokens: number } | undefined>(undefined)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
@@ -203,8 +222,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
   // Timeout duration based on thinking level (extended thinking needs more time)
   const getTimeoutMs = () => {
     switch (thinkingLevel) {
-      case 'ultrathink': return 5 * 60 * 1000  // 5 minutes
-      case 'megathink': return 3 * 60 * 1000   // 3 minutes
+      case ThinkingLevel.Megathink: return 10 * 60 * 1000  // 10 minutes
+      case ThinkingLevel.High: return 5 * 60 * 1000        // 5 minutes
+      case ThinkingLevel.Medium: return 3 * 60 * 1000      // 3 minutes
       default: return 2 * 60 * 1000            // 2 minutes
     }
   }
@@ -214,19 +234,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
     api: `${API_BASE}/chat`,
     body: {
       model: selectedModel,
-      level: thinkingLevel === 'think' ? 'Think' : thinkingLevel === 'megathink' ? 'Megathink' : 'Ultrathink',
+      level: thinkingLevel,
       planMode,
       toolApproval: toolApprovalEnabled, // AI SDK 6.0 human-in-the-loop
+      temperature: settings.claude.temperature,
+      topP: settings.claude.topP,
     },
-  }), [selectedModel, thinkingLevel, planMode, toolApprovalEnabled])
+  }), [selectedModel, thinkingLevel, planMode, toolApprovalEnabled, settings.claude.temperature, settings.claude.topP])
 
-  const { messages, sendMessage, status, setMessages } = useChat({
+  const { messages, sendMessage, status, setMessages, stop } = useChat({
     id: tabId,
     transport: chatTransport,
-    onFinish: ({ message }: { message: UIMessage }) => {
+    onFinish: (message, { usage }) => {
       const duration = submitTime ? Math.round((Date.now() - submitTime) / 1000) : undefined
       setIsSubmitting(false)
       setSubmitTime(null)
+      if (usage) {
+        setLastUsage(usage)
+      }
       // Clear abort controller on success
       abortControllerRef.current = null
       setExtendedMessages(prev => {
@@ -242,6 +267,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
             content: textContent,
             isStreaming: false,
             duration,
+            usage: usage as any,
           }
         }
         return updated
@@ -309,19 +335,33 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
         const existing = prev.find(m => m.id === msg.id)
         const rawContent = getMessageContent(msg)
         
-        if (existing && !isLoading && !rawContent.includes('<Thinking>') && existing.content === rawContent) {
+        if (existing && !isLoading && !rawContent.includes('<Thinking>') && existing.content === rawContent && existing.toolCalls?.length === (msg as any).toolInvocations?.length) {
           return existing
         }
 
         const parts = parseMessageParts(rawContent, msg.role as 'user' | 'assistant')
+        
+        // Check for native reasoning in parts (AI SDK 6.0)
+        const nativeReasoningPart = msg.parts?.find((p: any) => p.type === 'reasoning')
+        const nativeReasoning = nativeReasoningPart ? (nativeReasoningPart as any).reasoning : undefined
+
+        // Map tool invocations from AI SDK
+        const toolCalls = (msg as any).toolInvocations?.map((inv: any) => ({
+          id: inv.toolCallId,
+          name: inv.toolName,
+          args: inv.args,
+          status: inv.state === 'result' ? 'complete' : 'executing',
+          result: inv.result,
+        }))
 
         return {
           id: msg.id,
           role: msg.role as 'user' | 'assistant',
           content: rawContent,
           parts,
-          thinking: parts.find(p => p.type === 'thinking')?.content,
+          thinking: nativeReasoning || parts.find(p => p.type === 'thinking')?.content,
           showThinking: existing?.showThinking ?? false,
+          toolCalls,
           isStreaming: isLoading && msg.id === messages[messages.length - 1]?.id,
           timestamp: existing?.timestamp ?? Date.now(),
           replyToId: existing?.replyToId,
@@ -397,6 +437,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
       const timeoutId = setTimeout(() => {
         if (abortControllerRef.current) {
           abortControllerRef.current.abort()
+          stop() // Stop the chat stream
           setRequestError('Request timed out. Try a shorter message or lower thinking level.')
           setIsSubmitting(false)
           setSubmitTime(null)
@@ -551,6 +592,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
                 )}
 
                 <div className="space-y-3">
+                  {msg.plan && (
+                    <PlanProgress plan={msg.plan} />
+                  )}
+
+                  {/* Tool Calls */}
+                  {msg.toolCalls?.map((toolCall) => (
+                    <ToolInvocationBlock
+                      key={toolCall.id}
+                      toolCall={toolCall}
+                    />
+                  ))}
+
                   {msg.parts.map((part, idx) => {
                     const partId = `${msg.id}-${idx}`
                     if (part.type === 'thinking') return null
@@ -783,8 +836,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
               >
                 {toolApprovalEnabled ? <Shield size={16} /> : <ShieldOff size={16} />}
               </button>
-              <ThinkingLevelSelector level={thinkingLevel} onChange={setThinkingLevel} />
+              <ThinkingToggle level={thinkingLevel} onChange={setThinkingLevel} usage={lastUsage} />
               <MCPStatus connected={3} failed={0} />
+              <ConnectionStatus status={status} error={requestError} />
             </div>
             <div className="flex items-center gap-1">
               <button
@@ -829,6 +883,130 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
   )
 }
 
+// Component: Tool Invocation Block
+interface ToolInvocationBlockProps {
+  toolCall: ToolCall
+}
+
+const ToolInvocationBlock: React.FC<ToolInvocationBlockProps> = ({ toolCall }) => {
+  const [isOpen, setIsOpen] = useState(false)
+  const isError = toolCall.status === 'error'
+  const isComplete = toolCall.status === 'complete'
+
+  const formatResult = (result: unknown): string => {
+    if (typeof result === 'string') return result
+    if (result === undefined || result === null) return ''
+    try {
+      return JSON.stringify(result, null, 2)
+    } catch (e) {
+      return String(result)
+    }
+  }
+
+  return (
+    <div className="bg-white/[0.02] border border-white/10 rounded-lg overflow-hidden my-2">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <div className={clsx(
+            "p-1 rounded",
+            isError ? "bg-red-500/10 text-red-400" :
+            isComplete ? "bg-emerald-500/10 text-emerald-400" : "bg-blue-500/10 text-blue-400"
+          )}>
+            <Terminal size={12} />
+          </div>
+          <span className="text-xs font-mono text-white/70">{toolCall.name}</span>
+          {isError ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-medium">Failed</span>
+          ) : isComplete ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-medium">Success</span>
+          ) : (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 font-medium">Running...</span>
+          )}
+        </div>
+        <ChevronDown size={14} className={clsx("text-white/40 transition-transform", !isOpen && "-rotate-90")} />
+      </button>
+
+      {isOpen && (
+        <div className="border-t border-white/10 bg-black/20">
+          <div className="p-3 space-y-3">
+            {/* Special handling for apply_diff args */}
+            {toolCall.name === 'apply_diff' && (toolCall.args as any)?.diff ? (
+              <div>
+                <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Diff Preview</div>
+                <div className="bg-black/40 rounded border border-white/5 p-2 overflow-x-auto">
+                  <SyntaxHighlighter
+                    language="diff"
+                    style={atelierSulphurpoolDark}
+                    customStyle={{ margin: 0, padding: 0, background: 'transparent', fontSize: '12px' }}
+                  >
+                    {(toolCall.args as any).diff}
+                  </SyntaxHighlighter>
+                </div>
+                <div className="mt-2 text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Arguments</div>
+                <div className="bg-black/40 rounded border border-white/5 p-2 overflow-x-auto">
+                  <SyntaxHighlighter
+                    language="json"
+                    style={atelierSulphurpoolDark}
+                    customStyle={{ margin: 0, padding: 0, background: 'transparent', fontSize: '12px' }}
+                  >
+                    {JSON.stringify(toolCall.args, null, 2)}
+                  </SyntaxHighlighter>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Arguments</div>
+                <div className="bg-black/40 rounded border border-white/5 p-2 overflow-x-auto">
+                  <SyntaxHighlighter
+                    language="json"
+                    style={atelierSulphurpoolDark}
+                    customStyle={{ margin: 0, padding: 0, background: 'transparent', fontSize: '12px' }}
+                  >
+                    {JSON.stringify(toolCall.args, null, 2)}
+                  </SyntaxHighlighter>
+                </div>
+              </div>
+            )}
+            
+            {toolCall.result && (
+              <div>
+                <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Result</div>
+                {/* Use DiffViewer for git_diff results */}
+                {toolCall.name === 'git_diff' && typeof toolCall.result === 'string' ? (
+                   <DiffViewer rawDiff={toolCall.result} />
+                ) : (
+                  <div className="bg-black/40 rounded border border-white/5 p-2 max-h-[300px] overflow-y-auto">
+                    <SyntaxHighlighter
+                      language="json" // Default to JSON, but could be text
+                      style={atelierSulphurpoolDark}
+                      customStyle={{ margin: 0, padding: 0, background: 'transparent', fontSize: '12px' }}
+                      wrapLines={true}
+                    >
+                      {formatResult(toolCall.result)}
+                    </SyntaxHighlighter>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {toolCall.error && (
+              <div>
+                <div className="text-[10px] text-red-400/60 uppercase tracking-wider mb-1.5">Error</div>
+                <div className="bg-red-500/5 rounded border border-red-500/10 p-2 text-xs text-red-300 font-mono">
+                  {toolCall.error}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Component: Thinking Block
 interface ThinkingBlockProps {
   content: string
@@ -863,48 +1041,6 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({ content, isOpen, onToggle
   </div>
 )
 
-// Component: Code Block with Copy Button
-interface CodeBlockProps {
-  code: string
-  language: string
-  onCopy: () => void
-  isCopied: boolean
-}
-
-const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, onCopy, isCopied }) => (
-  <div className="bg-white/[0.02] border border-white/10 rounded-lg overflow-hidden my-3 group">
-    <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-white/5">
-      <span className="text-xs text-white/40 font-mono uppercase tracking-wide">{language || 'text'}</span>
-      <button
-        onClick={onCopy}
-        type="button"
-        className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-white/40 hover:text-white/60 hover:bg-white/10 transition-colors"
-      >
-        {isCopied ? (
-          <><Check size={14} /><span>Copied</span></>
-        ) : (
-          <><Copy size={14} /><span>Copy</span></>
-        )}
-      </button>
-    </div>
-    <div className="overflow-x-auto max-h-[600px]">
-      <SyntaxHighlighter
-        language={language || 'text'}
-        style={atelierSulphurpoolDark}
-        customStyle={{
-          margin: 0,
-          padding: '1rem',
-          fontSize: '13px',
-          lineHeight: '1.5',
-          backgroundColor: 'transparent',
-        }}
-        wrapLines={true}
-      >
-        {code}
-      </SyntaxHighlighter>
-    </div>
-  </div>
-)
 
 interface ModelSelectorProps {
   selectedModel: string
@@ -989,58 +1125,6 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ selectedModel, onModelCha
   )
 }
 
-interface ThinkingLevelSelectorProps {
-  level: 'think' | 'megathink' | 'ultrathink'
-  onChange: (level: 'think' | 'megathink' | 'ultrathink') => void
-}
-
-const ThinkingLevelSelector: React.FC<ThinkingLevelSelectorProps> = ({ level, onChange }) => {
-  const [isOpen, setIsOpen] = useState(false)
-  const levels = [
-    { id: 'think' as const, name: 'Think', desc: 'Basic reasoning' },
-    { id: 'megathink' as const, name: 'Megathink', desc: 'Deeper analysis' },
-    { id: 'ultrathink' as const, name: 'Ultrathink', desc: 'Maximum reasoning' },
-  ]
-  const current = levels.find(l => l.id === level) || levels[0]
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1.5 p-2 text-white/40 hover:text-white/60 hover:bg-white/5 rounded-lg transition-colors"
-        title="Adjust thinking level"
-      >
-        <Brain size={16} />
-        <span className="text-[10px] font-medium">:</span>
-      </button>
-
-      {isOpen && (
-        <div className="absolute bottom-full mb-2 left-0 bg-elevated border border-default rounded-lg shadow-xl overflow-hidden z-50 min-w-[160px]">
-          <div className="px-3 py-2 text-[10px] text-white/40">Adjust thinking level</div>
-          {levels.map(l => (
-            <button
-              key={l.id}
-              type="button"
-              onClick={() => {
-                onChange(l.id)
-                setIsOpen(false)
-              }}
-              className={clsx(
-                'w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors',
-                level === l.id ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5'
-              )}
-            >
-              <Brain size={14} />
-              <span className="mr-1">:</span>
-              <span>{l.name}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 interface MCPStatusProps {
   connected: number
@@ -1079,6 +1163,43 @@ const MCPStatus: React.FC<MCPStatusProps> = ({ connected, failed }) => {
           </button>
         </div>
       )}
+    </div>
+  )
+}
+
+interface ConnectionStatusProps {
+  status: string
+  error: string | null
+}
+
+const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ status, error }) => {
+  let color = 'bg-green-500'
+  let label = 'Idle'
+  let pulse = false
+
+  if (error) {
+    color = 'bg-red-500'
+    label = 'Error'
+  } else if (status === 'submitted') {
+    color = 'bg-yellow-500'
+    label = 'Connecting'
+    pulse = true
+  } else if (status === 'streaming') {
+    color = 'bg-green-500'
+    label = 'Streaming'
+    pulse = true
+  }
+
+  return (
+    <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/5 border border-white/10" title={`Status: ${label}`}>
+      <div className={clsx(
+        "w-2 h-2 rounded-full transition-all",
+        color,
+        pulse && "animate-pulse shadow-[0_0_8px_rgba(255,255,255,0.3)]"
+      )} />
+      <span className="text-[10px] font-medium text-white/60 uppercase tracking-wider hidden sm:inline-block">
+        {label}
+      </span>
     </div>
   )
 }
