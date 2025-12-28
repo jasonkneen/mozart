@@ -7,7 +7,6 @@ type StoreState = {
   tabs: Tab[];
   activeTabId: string;
   messagesByTab: Record<string, Message[]>;
-  messages: Record<string, Message[]>;
   diffsByWorkspace: Record<string, FileDiff[]>;
   fileTreeByWorkspace: Record<string, FileNode[]>;
   diffsLoadingByWorkspace: Record<string, boolean>;
@@ -24,7 +23,6 @@ type StoreActions = {
   updateTab: (tabId: string, updates: Partial<Tab>) => void;
   addWorkspace: (workspace: Workspace) => void;
   setWorkspaces: (workspaces: Workspace[]) => void;
-  addMessage: (workspaceId: string, message: Message) => void;
   addTabMessage: (tabId: string, message: Message) => void;
   clearTabMessages: (tabId: string) => void;
   setWorkspaceDiffs: (workspaceId: string, diffs: FileDiff[]) => void;
@@ -49,7 +47,6 @@ type StoreAction =
   | { type: 'update-tab'; tabId: string; updates: Partial<Tab> }
   | { type: 'add-workspace'; workspace: Workspace }
   | { type: 'set-workspaces'; workspaces: Workspace[] }
-  | { type: 'add-message'; workspaceId: string; message: Message }
   | { type: 'add-tab-message'; tabId: string; message: Message }
   | { type: 'clear-tab-messages'; tabId: string }
   | { type: 'set-workspace-diffs'; workspaceId: string; diffs: FileDiff[] }
@@ -67,7 +64,6 @@ const createInitialState = (): StoreState => {
     tabs: [{ id: 't1', title: 'Claude', type: 'chat', active: true }],
     activeTabId: 't1',
     messagesByTab: {},
-    messages: {},
     diffsByWorkspace: {},
     fileTreeByWorkspace: {},
     diffsLoadingByWorkspace: {},
@@ -85,9 +81,6 @@ const mergeState = (loaded: Partial<StoreState> | null): StoreState => {
     : defaultState.workspaces;
 
   const tabs = Array.isArray(loaded.tabs) && loaded.tabs.length ? loaded.tabs : defaultState.tabs;
-  const messages = loaded.messages && typeof loaded.messages === 'object'
-    ? loaded.messages
-    : defaultState.messages;
   const diffsByWorkspace = loaded.diffsByWorkspace && typeof loaded.diffsByWorkspace === 'object'
     ? loaded.diffsByWorkspace
     : defaultState.diffsByWorkspace;
@@ -123,7 +116,6 @@ const mergeState = (loaded: Partial<StoreState> | null): StoreState => {
     tabs,
     activeTabId: resolvedActiveTabId,
     messagesByTab,
-    messages,
     diffsByWorkspace,
     fileTreeByWorkspace,
     diffsLoadingByWorkspace,
@@ -201,18 +193,7 @@ const reducer = (state: StoreState, action: StoreAction): StoreState => {
       return {
         ...state,
         workspaces: [...state.workspaces, action.workspace],
-        activeWorkspaceId: action.workspace.id,
-        messages: { ...state.messages, [action.workspace.id]: state.messages[action.workspace.id] || [] }
-      };
-    }
-    case 'add-message': {
-      const existing = state.messages[action.workspaceId] || [];
-      return {
-        ...state,
-        messages: {
-          ...state.messages,
-          [action.workspaceId]: [...existing, action.message]
-        }
+        activeWorkspaceId: action.workspace.id
       };
     }
     case 'set-workspace-diffs': {
@@ -296,7 +277,6 @@ export const ConductorStoreProvider: React.FC<{ children: React.ReactNode }> = (
       setActiveTab: (id) => dispatch({ type: 'set-active-tab', id }),
       addWorkspace: (workspace) => dispatch({ type: 'add-workspace', workspace }),
       setWorkspaces: (workspaces) => dispatch({ type: 'set-workspaces', workspaces }),
-      addMessage: (workspaceId, message) => dispatch({ type: 'add-message', workspaceId, message }),
       addTab: (tab) => dispatch({ type: 'add-tab', tab }),
       removeTab: (tabId) => dispatch({ type: 'remove-tab', tabId }),
       setTabDirty: (tabId, isDirty) => dispatch({ type: 'set-tab-dirty', tabId, isDirty }),

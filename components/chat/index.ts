@@ -1,0 +1,10 @@
+// Chat components barrel export
+export { BrailleSpinner } from './BrailleSpinner'
+export { StreamingIndicator } from './StreamingIndicator'
+export { MessageFooter } from './MessageFooter'
+export type { MessageFooterProps } from './MessageFooter'
+export { ToolInvocationBlock, type ToolCall } from './ToolInvocationBlock'
+export { ThinkingBlock } from './ThinkingBlock'
+export { ModelSelector } from './ModelSelector'
+export { MCPStatus } from './MCPStatus'
+export { ConnectionStatus } from './ConnectionStatus'

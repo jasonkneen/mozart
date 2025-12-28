@@ -136,6 +136,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search workspaces"
             className="w-full bg-white/5 border border-white/5 outline-none rounded-lg pl-9 py-1.5 text-sm text-white placeholder:text-white/20 focus:border-white/20 focus:bg-white/10 transition-all"
           />
         </div>
@@ -155,7 +156,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                 {/* New workspace button - inline with header */}
                 {!searchQuery && fleetIdx === 0 && (
                   <button
-                    onClick={() => onAddWorkspace()}
+                    onClick={() => handleOpenRepoModal('local')}
+                    aria-label="Create new workspace"
                     className="flex items-center gap-1.5 px-2 py-1 text-white/40 hover:text-white text-xs font-medium rounded-lg hover:bg-white/10 transition-all"
                   >
                     <Plus size={14} />
@@ -170,6 +172,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                     key={ws.id}
                     onClick={() => onSelectWorkspace(ws.id)}
                     onContextMenu={(e) => handleContextMenu(e, ws)}
+                    aria-label={`Switch to workspace: ${ws.name || ws.branch}`}
+                    aria-current={activeWorkspaceId === ws.id ? 'true' : undefined}
                     className={`w-full group relative flex flex-col gap-1 px-3 py-2.5 rounded-lg transition-all text-left border ${
                       activeWorkspaceId === ws.id
                         ? 'bg-white/10 border-white/10 shadow-lg'
@@ -220,7 +224,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={(e) => { e.stopPropagation(); setShowUpdatesBanner(false); }}
             className="absolute top-2 right-2 p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-            title="Dismiss"
+            aria-label="Dismiss updates banner"
           >
             <X size={14} className="text-white/40 hover:text-white" />
           </button>
@@ -244,6 +248,9 @@ const Sidebar: React.FC<SidebarProps> = ({
             <div className="relative">
                <button
                  onClick={() => setIsAddMenuOpen(!isAddMenuOpen)}
+                 aria-expanded={isAddMenuOpen}
+                 aria-haspopup="menu"
+                 aria-label="Add repository menu"
                  className="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors group"
                >
                  <Plus size={16} className="text-white/20 group-hover:text-white transition-colors" />
@@ -251,8 +258,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                </button>
 
                {isAddMenuOpen && (
-                <div className="absolute bottom-full left-0 mb-2 w-full bg-elevated border border-default rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 z-50">
+                <div role="menu" aria-label="Repository options" className="absolute bottom-full left-0 mb-2 w-full bg-elevated border border-default rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 z-50">
                   <button
+                    role="menuitem"
                     onClick={() => {
                       setIsFilePickerOpen(true);
                       setIsAddMenuOpen(false);
@@ -262,12 +270,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                     <FolderOpen size={14} /> Open project
                   </button>
                   <button
+                    role="menuitem"
                     onClick={() => handleOpenRepoModal('url')}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors border-t border-white/5"
                   >
                     <Link size={14} /> Clone from URL
                   </button>
                   <button
+                    role="menuitem"
                     onClick={() => {
                       setIsGitHubBrowserOpen(true);
                       setIsAddMenuOpen(false);
@@ -277,7 +287,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                     <Github size={14} /> Browse GitHub
                   </button>
                   <button
-                    onClick={() => onAddWorkspace()}
+                    role="menuitem"
+                    onClick={() => handleOpenRepoModal('local')}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors border-t border-white/5"
                   >
                     <Zap size={14} /> Quick start
@@ -288,6 +299,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
             <button
               onClick={onSettingsClick}
+              aria-label="Open settings"
               className="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors group"
             >
               <Settings size={16} className="text-white/20 group-hover:text-white transition-colors" />
@@ -324,12 +336,16 @@ const Sidebar: React.FC<SidebarProps> = ({
           <div
             className="fixed inset-0 z-[100]"
             onClick={() => setContextMenu(null)}
+            aria-hidden="true"
           />
           <div
+            role="menu"
+            aria-label="Workspace actions"
             className="fixed z-[101] bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl py-1 min-w-[180px] animate-in fade-in zoom-in-95"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
             <button
+              role="menuitem"
               onClick={handleShowInFinder}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 transition-colors"
             >
@@ -337,6 +353,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               Show in Finder
             </button>
             <button
+              role="menuitem"
               onClick={handleOpenInTerminal}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 transition-colors"
             >

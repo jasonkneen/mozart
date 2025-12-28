@@ -5,6 +5,7 @@ import {
   RefreshCw, ChevronRight, Clock, Code
 } from 'lucide-react';
 import { githubService, GitHubRepo, GitHubUser } from '../services/githubService';
+import { SkeletonCard } from './ui/skeleton';
 
 interface GitHubReposBrowserProps {
   isOpen: boolean;
@@ -213,7 +214,11 @@ const GitHubReposBrowser: React.FC<GitHubReposBrowserProps> = ({
               )}
 
               {isLoading && (
-                <div className="p-8 text-center text-white/40 text-sm">Loading...</div>
+                <div className="p-4 space-y-3">
+                  <SkeletonCard />
+                  <SkeletonCard />
+                  <SkeletonCard />
+                </div>
               )}
 
               {!isLoading && !error && currentRepos.length === 0 && (

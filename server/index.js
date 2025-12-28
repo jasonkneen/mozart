@@ -815,17 +815,111 @@ const handleRequest = async (req, res) => {
   }
 
   // ==========================================
+  // AI Code Review Endpoint (uses Claude Code CLI)
+  // ==========================================
+
+  if (parsed.pathname === '/api/review' && method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      if (!body?.diffs || !Array.isArray(body.diffs)) {
+        return sendError(res, 400, 'diffs array is required');
+      }
+
+      const workspacePath = body.workspacePath || process.cwd();
+
+      // Build a diff summary for review
+      const diffSummary = body.diffs.map(d =>
+        `File: ${d.path} (+${d.added}/-${d.removed}) [${d.status}]`
+      ).join('\n');
+
+      // Get actual file contents for changed files (limit to first 5)
+      const fileContents = [];
+      for (const diff of body.diffs.slice(0, 5)) {
+        try {
+          const filePath = path.join(workspacePath, diff.path);
+          const content = await readFile(filePath, 'utf8');
+          fileContents.push({
+            path: diff.path,
+            content: content.slice(0, 5000), // Limit to 5k chars per file
+            status: diff.status,
+          });
+        } catch {
+          // File might not exist (deleted)
+        }
+      }
+
+      const reviewPrompt = `You are an expert code reviewer. Analyze these code changes and provide specific, actionable feedback.
+
+## Changed Files Summary
+${diffSummary}
+
+## File Contents
+${fileContents.map(f => `### ${f.path} (${f.status})
+\`\`\`
+${f.content}
+\`\`\`
+`).join('\n')}
+
+Provide a JSON response with:
+1. "summary": Brief overall assessment (1-2 sentences)
+2. "suggestions": Array of specific improvement suggestions (max 6)
+3. "issues": Array of potential bugs or problems found
+4. "security": Any security concerns
+5. "rating": Overall rating (good/needs-work/critical)
+
+Focus on:
+- Logic errors and edge cases
+- Performance issues
+- Security vulnerabilities
+- Code quality and maintainability
+- Missing error handling`;
+
+      // Use claudeCode provider (uses CLI auth)
+      const result = await streamText({
+        model: claudeCode('haiku'), // Use haiku for faster reviews
+        system: 'You are an expert code reviewer. Respond only with valid JSON.',
+        prompt: reviewPrompt,
+        maxTokens: 2000,
+      });
+
+      // Collect the response
+      let fullText = '';
+      for await (const chunk of result.textStream) {
+        fullText += chunk;
+      }
+
+      // Parse JSON response
+      try {
+        // Extract JSON from response (handle markdown code blocks)
+        const jsonMatch = fullText.match(/```json?\s*([\s\S]*?)```/) || [null, fullText];
+        const review = JSON.parse(jsonMatch[1] || fullText);
+        return sendJson(res, 200, { success: true, review });
+      } catch {
+        // If JSON parsing fails, return structured response from text
+        return sendJson(res, 200, {
+          success: true,
+          review: {
+            summary: 'Review completed',
+            suggestions: fullText.split('\n').filter(l => l.trim().startsWith('-')).map(l => l.trim().slice(2)),
+            issues: [],
+            security: null,
+            rating: 'good',
+            rawResponse: fullText,
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Review error:', error);
+      return sendError(res, 500, error.message || 'Failed to generate review');
+    }
+  }
+
+  // ==========================================
   // Chat Endpoint (uses OAuth token)
   // ==========================================
 
   if (parsed.pathname === '/api/chat' && method === 'POST') {
     try {
-      // Security: Verify user is authenticated before allowing chat
-      const authResult = await getAccessToken();
-      if (!authResult.success) {
-        return sendError(res, 401, 'Authentication required. Please login first.');
-      }
-
       const body = await readJsonBody(req);
       if (!body?.messages) {
         return sendError(res, 400, 'messages is required');

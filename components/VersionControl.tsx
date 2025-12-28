@@ -10,6 +10,7 @@ import Terminal from './Terminal';
 import DiffViewer from './DiffViewer';
 import ReviewPanel from './ReviewPanel';
 import { gitService } from '../services/gitService';
+import { SkeletonList, SkeletonFileTree } from './ui/skeleton';
 
 type TerminalTab = {
   id: string;
@@ -260,10 +261,12 @@ const VersionControl: React.FC<VersionControlProps> = ({
             ) : (
               <div className="space-y-0.5">
                 {isLoading && (
-                  <div className="px-3 py-6 text-xs text-white/40">Loading changes...</div>
+                  <div className="px-3 py-4">
+                    <SkeletonList count={4} itemClassName="px-2" />
+                  </div>
                 )}
                 {!isLoading && diffs.length === 0 && (
-                  <div className="px-3 py-6 text-xs text-white/40">No changes detected.</div>
+                  <div className="px-3 py-6 text-xs text-muted">No changes detected.</div>
                 )}
                 {!isLoading && diffs.map((change) => (
                   <div
@@ -289,10 +292,12 @@ const VersionControl: React.FC<VersionControlProps> = ({
           {activeTab === 'files' && (
             <div className="space-y-0.5">
               {isLoading && (
-                <div className="px-3 py-6 text-xs text-white/40">Loading file tree...</div>
+                <div className="px-3 py-4">
+                  <SkeletonFileTree count={8} depth={3} />
+                </div>
               )}
               {!isLoading && fileTree.length === 0 && (
-                <div className="px-3 py-6 text-xs text-white/40">No files found.</div>
+                <div className="px-3 py-6 text-xs text-muted">No files found.</div>
               )}
               {!isLoading && fileTree.map(node => (
                 <FileItem key={node.path} node={node} depth={0} onOpenFile={onOpenFile} />

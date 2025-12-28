@@ -97,15 +97,51 @@ const ReviewPanel: React.FC<ReviewPanelProps> = ({
 
   const handleAiReview = async () => {
     setIsAnalyzing(true);
-    // Simulate AI analysis
-    // TODO: Connect to backend AI service for real analysis
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setAiSuggestions([
-      'Consider adding error boundaries around async operations',
-      'The useEffect dependencies array might be missing some dependencies',
-      'This component could benefit from splitting into smaller subcomponents',
-      'Add null checks before accessing nested properties',
-    ]);
+    setAiSuggestions([]);
+
+    try {
+      const API_BASE = (import.meta as any).env?.VITE_CONDUCTOR_API_BASE || '/api';
+      const response = await fetch(`${API_BASE}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          diffs,
+          workspaceId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get AI review');
+      }
+
+      const result = await response.json();
+      if (result.success && result.review) {
+        const review = result.review;
+        const suggestions: string[] = [];
+
+        // Combine suggestions and issues
+        if (review.suggestions) {
+          suggestions.push(...review.suggestions);
+        }
+        if (review.issues) {
+          suggestions.push(...review.issues.map((i: string) => `⚠️ ${i}`));
+        }
+        if (review.security) {
+          suggestions.push(`🔒 Security: ${review.security}`);
+        }
+
+        // Add summary at the top
+        if (review.summary) {
+          suggestions.unshift(`📋 ${review.summary}`);
+        }
+
+        setAiSuggestions(suggestions);
+      }
+    } catch (error) {
+      console.error('AI review failed:', error);
+      setAiSuggestions(['Failed to complete AI review. Please try again.']);
+    }
+
     setIsAnalyzing(false);
     setActiveTab('ai');
   };

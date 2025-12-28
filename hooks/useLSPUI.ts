@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useElectronLSP } from './useElectronLSP'
-import type { LSPHoverResult, LSPCompletionItem, LSPLocation } from './useElectronLSP'
+import type { LSPHoverResult, LSPCompletionItem } from './useElectronLSP'
 
 export interface LSPUIState {
   // Hover tooltip

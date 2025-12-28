@@ -1,127 +1,36 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
-import SyntaxHighlighter from 'react-syntax-highlighter'
-import { atelierSulphurpoolDark } from 'react-syntax-highlighter/dist/esm/styles/hljs'
 import {
-  Send, Paperclip, Sparkles, ChevronDown, Brain, ChevronRight,
-  Copy, Check, Zap, ClipboardList, AlertTriangle, Link, ArrowUpRight, Shield, ShieldOff,
-  Reply, X, Terminal, Wrench
+  Send, Paperclip, Sparkles,
+  Copy, Check, ClipboardList, Link, Shield, ShieldOff,
+  Reply, X, AlertTriangle
 } from 'lucide-react'
-const BRAILLE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-
-function BrailleSpinner() {
-  const [frame, setFrame] = React.useState(0)
-
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      setFrame(f => (f + 1) % BRAILLE_FRAMES.length)
-    }, 80)
-    return () => clearInterval(interval)
-  }, [])
-
-  return <span className="text-white/40 ml-1">{BRAILLE_FRAMES[frame]}</span>
-}
-
-// Streaming progress indicator with elapsed time
-function StreamingIndicator({ startTime, thinkingLevel }: { startTime: number | null; thinkingLevel: string }) {
-  const [elapsed, setElapsed] = React.useState(0)
-
-  React.useEffect(() => {
-    if (!startTime) return
-    const interval = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startTime) / 1000))
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [startTime])
-
-  const thinkingLabels: Record<string, string> = {
-    low: 'Thinking',
-    medium: 'Deep thinking',
-    high: 'Complex reasoning',
-    megathink: 'Extended reasoning'
-  }
-
-  return (
-    <div className="flex items-center gap-3 text-white/40 text-sm animate-in fade-in">
-      <BrailleSpinner />
-      <span className="font-mono">{thinkingLabels[thinkingLevel] || 'Processing'}...</span>
-      <span className="text-xs font-mono text-white/25">{elapsed}s</span>
-    </div>
-  )
-}
-
-interface MessageFooterProps {
-  duration?: number
-  content: string
-  onCopy: () => void
-  isCopied: boolean
-  timestamp?: number
-  onReply?: () => void
-  formatRelativeTime: (ts: number) => string
-}
-
-function MessageFooter({ duration, content, onCopy, isCopied, timestamp, onReply, formatRelativeTime }: MessageFooterProps) {
-  return (
-    <div className="flex items-center gap-3 mt-3 text-white/30">
-      {timestamp && (
-        <span className="text-[11px]">{formatRelativeTime(timestamp)}</span>
-      )}
-      {duration !== undefined && (
-        <>
-          <span className="text-white/10">·</span>
-          <span className="text-xs font-mono">{duration}s</span>
-        </>
-      )}
-      <span className="text-white/10">·</span>
-      <button
-        onClick={onCopy}
-        className="p-1 hover:text-white/50 transition-colors"
-        title="Copy message"
-      >
-        {isCopied ? <Check size={14} /> : <Copy size={14} />}
-      </button>
-      {onReply && (
-        <button
-          onClick={onReply}
-          className="p-1 hover:text-white/50 transition-colors"
-          title="Reply"
-        >
-          <Reply size={14} />
-        </button>
-      )}
-      <button
-        className="p-1 hover:text-white/50 transition-colors"
-        title="Fork conversation"
-      >
-        <ArrowUpRight size={14} />
-      </button>
-    </div>
-  )
-}
 import { useChat, UIMessage } from '@ai-sdk/react'
+import {
+  BrailleSpinner,
+  StreamingIndicator,
+  MessageFooter,
+  ToolInvocationBlock,
+  ThinkingBlock,
+  ModelSelector,
+  MCPStatus,
+  ConnectionStatus,
+  type ToolCall
+} from './chat'
 import { DefaultChatTransport } from 'ai'
 import clsx from 'clsx'
 import { useConductorStore } from '../services/store'
-import { InputAutocomplete, AutocompleteItem } from './InputAutocomplete'
+import { InputAutocomplete } from './InputAutocomplete'
 import { ToolApprovalCard } from './ToolApprovalCard'
 import { useToolApproval } from '../hooks/useToolApproval'
 import { useSettings } from '../hooks/useSettings'
-import DiffViewer from './DiffViewer'
+
 import { CodeBlock } from './CodeBlock'
 import { ThinkingLevel } from '../types'
 import ThinkingToggle from './ThinkingToggle'
 import { PlanProgress } from './PlanProgress'
 
 const API_BASE = (import.meta as any).env?.VITE_CONDUCTOR_API_BASE || '/api'
-
-interface ToolCall {
-  id: string
-  name: string
-  args: Record<string, unknown>
-  status: 'pending' | 'executing' | 'complete' | 'error'
-  result?: unknown
-  error?: string
-}
 
 interface MessagePart {
   type: 'text' | 'code' | 'thinking' | 'tool_call' | 'artifact' | 'image'
@@ -209,7 +118,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
   // Tool approval hook (AI SDK 6.0)
   const {
     pendingApprovals,
-    isConnected: isToolApprovalConnected,
     approve: approveToolCall,
     reject: rejectToolCall,
   } = useToolApproval({
@@ -229,7 +137,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
     }
   }
 
-  // Transport needs to be recreated when planMode/model/level/toolApproval changes
+  // Get workspace path for tool execution
+  const workspacePath = activeWorkspace?.workspacePath || activeWorkspace?.location || ''
+
+  // Transport needs to be recreated when planMode/model/level/toolApproval/workspace changes
   const chatTransport = React.useMemo(() => new DefaultChatTransport({
     api: `${API_BASE}/chat`,
     body: {
@@ -239,19 +150,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
       toolApproval: toolApprovalEnabled, // AI SDK 6.0 human-in-the-loop
       temperature: settings.claude.temperature,
       topP: settings.claude.topP,
+      workspacePath, // Pass workspace path for tool execution context
     },
-  }), [selectedModel, thinkingLevel, planMode, toolApprovalEnabled, settings.claude.temperature, settings.claude.topP])
+  }), [selectedModel, thinkingLevel, planMode, toolApprovalEnabled, settings.claude.temperature, settings.claude.topP, workspacePath])
 
   const { messages, sendMessage, status, setMessages, stop } = useChat({
     id: tabId,
     transport: chatTransport,
-    onFinish: (message, { usage }) => {
+    onFinish: ({ message }) => {
       const duration = submitTime ? Math.round((Date.now() - submitTime) / 1000) : undefined
       setIsSubmitting(false)
       setSubmitTime(null)
-      if (usage) {
-        setLastUsage(usage)
-      }
       // Clear abort controller on success
       abortControllerRef.current = null
       setExtendedMessages(prev => {
@@ -267,7 +176,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
             content: textContent,
             isStreaming: false,
             duration,
-            usage: usage as any,
           }
         }
         return updated
@@ -678,7 +586,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
                   {!msg.isStreaming && msg.content && (
                     <MessageFooter
                       duration={msg.duration}
-                      content={msg.content}
                       onCopy={() => copyToClipboard(msg.content, `msg-${msg.id}`)}
                       isCopied={copiedId === `msg-${msg.id}`}
                       timestamp={msg.timestamp}
@@ -879,327 +786,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ tabId }) => {
           </div>
         </form>
       </div>
-    </div>
-  )
-}
-
-// Component: Tool Invocation Block
-interface ToolInvocationBlockProps {
-  toolCall: ToolCall
-}
-
-const ToolInvocationBlock: React.FC<ToolInvocationBlockProps> = ({ toolCall }) => {
-  const [isOpen, setIsOpen] = useState(false)
-  const isError = toolCall.status === 'error'
-  const isComplete = toolCall.status === 'complete'
-
-  const formatResult = (result: unknown): string => {
-    if (typeof result === 'string') return result
-    if (result === undefined || result === null) return ''
-    try {
-      return JSON.stringify(result, null, 2)
-    } catch (e) {
-      return String(result)
-    }
-  }
-
-  return (
-    <div className="bg-white/[0.02] border border-white/10 rounded-lg overflow-hidden my-2">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <div className={clsx(
-            "p-1 rounded",
-            isError ? "bg-red-500/10 text-red-400" :
-            isComplete ? "bg-emerald-500/10 text-emerald-400" : "bg-blue-500/10 text-blue-400"
-          )}>
-            <Terminal size={12} />
-          </div>
-          <span className="text-xs font-mono text-white/70">{toolCall.name}</span>
-          {isError ? (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-medium">Failed</span>
-          ) : isComplete ? (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-medium">Success</span>
-          ) : (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 font-medium">Running...</span>
-          )}
-        </div>
-        <ChevronDown size={14} className={clsx("text-white/40 transition-transform", !isOpen && "-rotate-90")} />
-      </button>
-
-      {isOpen && (
-        <div className="border-t border-white/10 bg-black/20">
-          <div className="p-3 space-y-3">
-            {/* Special handling for apply_diff args */}
-            {toolCall.name === 'apply_diff' && (toolCall.args as any)?.diff ? (
-              <div>
-                <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Diff Preview</div>
-                <div className="bg-black/40 rounded border border-white/5 p-2 overflow-x-auto">
-                  <SyntaxHighlighter
-                    language="diff"
-                    style={atelierSulphurpoolDark}
-                    customStyle={{ margin: 0, padding: 0, background: 'transparent', fontSize: '12px' }}
-                  >
-                    {(toolCall.args as any).diff}
-                  </SyntaxHighlighter>
-                </div>
-                <div className="mt-2 text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Arguments</div>
-                <div className="bg-black/40 rounded border border-white/5 p-2 overflow-x-auto">
-                  <SyntaxHighlighter
-                    language="json"
-                    style={atelierSulphurpoolDark}
-                    customStyle={{ margin: 0, padding: 0, background: 'transparent', fontSize: '12px' }}
-                  >
-                    {JSON.stringify(toolCall.args, null, 2)}
-                  </SyntaxHighlighter>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Arguments</div>
-                <div className="bg-black/40 rounded border border-white/5 p-2 overflow-x-auto">
-                  <SyntaxHighlighter
-                    language="json"
-                    style={atelierSulphurpoolDark}
-                    customStyle={{ margin: 0, padding: 0, background: 'transparent', fontSize: '12px' }}
-                  >
-                    {JSON.stringify(toolCall.args, null, 2)}
-                  </SyntaxHighlighter>
-                </div>
-              </div>
-            )}
-            
-            {toolCall.result && (
-              <div>
-                <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Result</div>
-                {/* Use DiffViewer for git_diff results */}
-                {toolCall.name === 'git_diff' && typeof toolCall.result === 'string' ? (
-                   <DiffViewer rawDiff={toolCall.result} />
-                ) : (
-                  <div className="bg-black/40 rounded border border-white/5 p-2 max-h-[300px] overflow-y-auto">
-                    <SyntaxHighlighter
-                      language="json" // Default to JSON, but could be text
-                      style={atelierSulphurpoolDark}
-                      customStyle={{ margin: 0, padding: 0, background: 'transparent', fontSize: '12px' }}
-                      wrapLines={true}
-                    >
-                      {formatResult(toolCall.result)}
-                    </SyntaxHighlighter>
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {toolCall.error && (
-              <div>
-                <div className="text-[10px] text-red-400/60 uppercase tracking-wider mb-1.5">Error</div>
-                <div className="bg-red-500/5 rounded border border-red-500/10 p-2 text-xs text-red-300 font-mono">
-                  {toolCall.error}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Component: Thinking Block
-interface ThinkingBlockProps {
-  content: string
-  isOpen: boolean
-  onToggle: () => void
-}
-
-const ThinkingBlock: React.FC<ThinkingBlockProps> = ({ content, isOpen, onToggle }) => (
-  <div className="bg-white/5 border border-white/10 rounded-lg overflow-hidden">
-    <button
-      onClick={onToggle}
-      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/10 transition-colors text-xs font-medium text-white/60 group"
-    >
-      <ChevronRight
-        size={14}
-        className={clsx('transition-transform', isOpen && 'rotate-90')}
-      />
-      <Brain size={14} className="text-purple-400/60" />
-      <span>Thinking Process</span>
-      <div className="ml-auto text-white/40 text-xs">
-        {content.length} chars
-      </div>
-    </button>
-
-    {isOpen && (
-      <div className="px-4 py-3 border-t border-white/10 bg-white/[0.02] max-h-[500px] overflow-y-auto">
-        <div className="prose prose-invert prose-sm max-w-none text-[13px] leading-relaxed text-white/50 font-normal">
-          <ReactMarkdown>{content}</ReactMarkdown>
-        </div>
-      </div>
-    )}
-  </div>
-)
-
-
-interface ModelSelectorProps {
-  selectedModel: string
-  onModelChange: (model: string) => void
-}
-
-const ModelSelector: React.FC<ModelSelectorProps> = ({ selectedModel, onModelChange }) => {
-  const [isOpen, setIsOpen] = useState(false)
-  
-  const modelGroups = [
-    {
-      name: 'Claude Code',
-      icon: Sparkles,
-      models: [
-        { id: 'opus', name: 'Opus 4.5', desc: 'Most capable' },
-        { id: 'sonnet', name: 'Sonnet 4.5', desc: 'Balanced' },
-        { id: 'haiku', name: 'Haiku 4.5', desc: 'Fast & efficient' },
-      ]
-    },
-    {
-      name: 'Codex',
-      icon: Zap,
-      models: [
-        { id: 'gpt-5.2-codex', name: 'GPT-5.2-Codex', desc: 'Latest', isNew: true },
-        { id: 'gpt-5.2', name: 'GPT-5.2', desc: 'Standard' },
-        { id: 'gpt-5.1-codex-max', name: 'GPT-5.1-Codex-Max', desc: 'Extended context' },
-      ]
-    }
-  ]
-  
-  const allModels = modelGroups.flatMap(g => g.models)
-  const current = allModels.find(m => m.id === selectedModel) || modelGroups[0].models[1]
-  const currentGroup = modelGroups.find(g => g.models.some(m => m.id === selectedModel)) || modelGroups[0]
-  const GroupIcon = currentGroup.icon
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-all text-xs text-white/60 hover:text-white/80"
-      >
-        <GroupIcon size={14} />
-        <span>{current.name}</span>
-        <ChevronDown size={12} className={clsx('transition-transform', isOpen && 'rotate-180')} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute bottom-full mb-2 left-0 bg-elevated border border-default rounded-lg shadow-xl overflow-hidden z-50 min-w-[200px]">
-          {modelGroups.map((group, groupIdx) => (
-            <div key={group.name}>
-              <div className="px-3 py-2 text-[10px] font-semibold text-white/40 uppercase tracking-wider bg-white/[0.02]">
-                {group.name}
-              </div>
-              {group.models.map(model => (
-                <button
-                  key={model.id}
-                  type="button"
-                  onClick={() => {
-                    onModelChange(model.id)
-                    setIsOpen(false)
-                  }}
-                  className={clsx(
-                    'w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors',
-                    selectedModel === model.id ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5 hover:text-white/80'
-                  )}
-                >
-                  <group.icon size={14} className="shrink-0 text-white/40" />
-                  <span className="flex-1 text-left">{model.name}</span>
-                  {model.isNew && (
-                    <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase bg-blue-500/20 text-blue-400 rounded">New</span>
-                  )}
-                  {selectedModel === model.id && <Check size={14} className="text-white/60" />}
-                </button>
-              ))}
-              {groupIdx < modelGroups.length - 1 && <div className="border-t border-white/5" />}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-
-interface MCPStatusProps {
-  connected: number
-  failed: number
-}
-
-const MCPStatus: React.FC<MCPStatusProps> = ({ connected, failed }) => {
-  const [isOpen, setIsOpen] = useState(false)
-  const hasIssues = failed > 0
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className={clsx(
-          'p-2 rounded-lg transition-colors',
-          hasIssues ? 'text-yellow-500 hover:bg-yellow-500/10' : 'text-white/40 hover:text-white/60 hover:bg-white/5'
-        )}
-        title={`MCP servers: ${connected} connected${failed > 0 ? `, ${failed} failed` : ''}`}
-      >
-        <AlertTriangle size={16} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute bottom-full mb-2 right-0 bg-elevated border border-default rounded-lg shadow-xl overflow-hidden z-50 min-w-[200px] p-3">
-          <div className="text-xs font-semibold text-white mb-1">MCP Status</div>
-          <div className="text-[11px] text-white/50 mb-3">
-            {connected} connected{failed > 0 && <span className="text-yellow-500">, {failed} failed</span>}
-          </div>
-          <button
-            onClick={() => setIsOpen(false)}
-            className="text-[11px] text-blue-400 hover:text-blue-300"
-          >
-            Read the MCP docs →
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-interface ConnectionStatusProps {
-  status: string
-  error: string | null
-}
-
-const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ status, error }) => {
-  let color = 'bg-green-500'
-  let label = 'Idle'
-  let pulse = false
-
-  if (error) {
-    color = 'bg-red-500'
-    label = 'Error'
-  } else if (status === 'submitted') {
-    color = 'bg-yellow-500'
-    label = 'Connecting'
-    pulse = true
-  } else if (status === 'streaming') {
-    color = 'bg-green-500'
-    label = 'Streaming'
-    pulse = true
-  }
-
-  return (
-    <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/5 border border-white/10" title={`Status: ${label}`}>
-      <div className={clsx(
-        "w-2 h-2 rounded-full transition-all",
-        color,
-        pulse && "animate-pulse shadow-[0_0_8px_rgba(255,255,255,0.3)]"
-      )} />
-      <span className="text-[10px] font-medium text-white/60 uppercase tracking-wider hidden sm:inline-block">
-        {label}
-      </span>
     </div>
   )
 }
