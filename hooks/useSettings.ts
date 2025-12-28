@@ -114,14 +114,14 @@ export function useSettings() {
       try {
         const parsed = JSON.parse(saved);
         // Merge with defaults to handle new fields
-        setSettings(prev => ({
+        setSettings({
           ...defaultSettings,
           ...parsed,
           claude: {
             ...defaultSettings.claude,
             ...parsed.claude
           }
-        }));
+        });
       } catch (e) {
         console.error('Failed to load settings:', e);
       }

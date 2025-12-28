@@ -4,6 +4,7 @@ import {
   Folder, FolderOpen, FileCode, ChevronRight, ChevronDown,
   HardDrive, Home, ArrowUp, RefreshCw, Search, X, Check
 } from 'lucide-react';
+import { SkeletonFileTree } from './ui/skeleton';
 
 interface FileEntry {
   name: string;
@@ -183,7 +184,9 @@ const FilePicker: React.FC<FilePickerProps> = ({
           )}
 
           {isLoading && (
-            <div className="p-8 text-center text-white/40 text-sm">Loading...</div>
+            <div className="p-4">
+              <SkeletonFileTree count={8} depth={2} />
+            </div>
           )}
 
           {!isLoading && !error && filteredEntries.length === 0 && (

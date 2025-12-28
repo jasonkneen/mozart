@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   User, GitBranch, Box, Terminal, Cpu, Zap, ExternalLink,
@@ -10,15 +9,19 @@ import {
 import { oauthService } from '../services/oauthService';
 import useMCP from '../hooks/useMCP';
 import { useSettings, Settings } from '../hooks/useSettings';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const Toggle: React.FC<{ enabled: boolean; onChange: (v: boolean) => void }> = ({ enabled, onChange }) => (
+const Toggle: React.FC<{ enabled: boolean; onChange: (v: boolean) => void; label?: string }> = ({ enabled, onChange, label }) => (
   <button
     onClick={() => onChange(!enabled)}
+    role="switch"
+    aria-checked={enabled}
+    aria-label={label}
     className={`w-11 h-6 rounded-full relative transition-colors ${
       enabled ? 'bg-blue-600' : 'bg-white/10'
     }`}
@@ -160,16 +163,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     setTimeout(() => setOpenaiVerify('idle'), 3000);
   };
 
-  // Handle Escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  const focusTrapRef = useFocusTrap<HTMLDivElement>(isOpen, {
+    onEscape: onClose,
+    returnFocus: true
+  });
 
   if (!isOpen) return null;
 
@@ -198,10 +195,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   ];
 
   return (
-    <div className="fixed inset-0 z-[100] bg-[#0d0d0d] flex animate-in fade-in duration-200">
+    <div 
+      ref={focusTrapRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-modal-title"
+      className="fixed inset-0 z-[100] bg-[#0d0d0d] flex animate-in fade-in duration-200"
+    >
       {/* Settings Nav */}
       <div className="w-[280px] h-full border-r border-white/5 flex flex-col p-6 pt-12 shrink-0">
-        <h2 className="text-lg font-semibold text-white mb-6">Settings</h2>
+        <h2 id="settings-modal-title" className="text-lg font-semibold text-white mb-6">Settings</h2>
 
         <div className="space-y-8 overflow-y-auto scrollbar-hide flex-1">
           {sections.map((section, idx) => (
@@ -231,6 +234,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         {/* Back to App - at bottom */}
         <button
           onClick={onClose}
+          aria-label="Close settings and return to app"
           className="flex items-center gap-2 text-base text-white/50 hover:text-white transition-all mt-6 group"
         >
           <ChevronDown size={18} className="rotate-90 group-hover:-translate-x-1 transition-transform" />

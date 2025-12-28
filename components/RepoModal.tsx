@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { X, FolderOpen, Link2, Search } from 'lucide-react';
 import { gitService } from '../services/gitService';
 import FilePicker from './FilePicker';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 export type RepoModalMode = 'local' | 'url';
 
@@ -30,6 +31,11 @@ const RepoModal: React.FC<RepoModalProps> = ({ isOpen, mode, onClose, onCreate }
   const [baseBranchError, setBaseBranchError] = useState('');
   const [isValidating, setIsValidating] = useState(false);
   const [isFilePickerOpen, setIsFilePickerOpen] = useState(false);
+  
+  const focusTrapRef = useFocusTrap<HTMLDivElement>(isOpen && !isFilePickerOpen, {
+    onEscape: onClose,
+    returnFocus: true
+  });
 
   useEffect(() => {
     if (isOpen) return;
@@ -86,16 +92,23 @@ const RepoModal: React.FC<RepoModalProps> = ({ isOpen, mode, onClose, onCreate }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div 
+      ref={focusTrapRef}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="repo-modal-title"
+    >
       <div className="w-[420px] rounded-2xl border border-white/10 bg-[#101010] shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
-          <div className="flex items-center gap-2 text-sm font-semibold text-white/80">
+          <div id="repo-modal-title" className="flex items-center gap-2 text-sm font-semibold text-white/80">
             {isLocal ? <FolderOpen size={16} /> : <Link2 size={16} />}
             {isLocal ? 'Open local repo' : 'Clone from URL'}
           </div>
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close modal"
             className="p-1 text-white/40 hover:text-white transition-colors"
           >
             <X size={16} />

@@ -1,0 +1,14 @@
+{
+  "doctor": {
+    "entry": "./modules/doctor/index.js"
+  },
+  "scan": {
+    "entry": "./modules/scan/index.js"
+  },
+  "genAgents": {
+    "entry": "./modules/genAgents/index.js"
+  },
+  "selfTest": {
+    "entry": "./modules/selfTest/index.js"
+  }
+}

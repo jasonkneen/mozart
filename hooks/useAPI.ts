@@ -171,7 +171,7 @@ export function useAPI(options?: UseAPIOptions): UseAPIResult {
       console.debug('[useAPI] Disconnecting adapter')
     }
 
-    await adapter.disconnect()
+    adapter.disconnect()
     setIsConnected(false)
   }, [adapter, options?.debug])
 

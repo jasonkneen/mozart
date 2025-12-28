@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import ChatInterface from './components/ChatInterface';
@@ -10,12 +10,13 @@ import Terminal from './components/Terminal';
 import FileEditor from './components/FileEditor';
 import DiffViewer from './components/DiffViewer';
 import OAuthCodeModal from './components/OAuthCodeModal';
-import { AlertCircle, X, LogIn, LogOut, User, FolderOpen, Globe, FileText, PanelLeft, PanelRight } from 'lucide-react';
+import { ErrorBoundary, InlineErrorBoundary } from './components/ErrorBoundary';
+import { AlertCircle, X, LogIn, FolderOpen, Globe, FileText, PanelLeft, PanelRight } from 'lucide-react';
 import RepoModal, { RepoModalMode, RepoModalPayload } from './components/RepoModal';
 import { useConductorStore } from './services/store';
 import { gitService } from './services/gitService';
 import { oauthService, openOAuthWindow } from './services/oauthService';
-import { FileDiff, DiffHunk } from './types';
+import { DiffHunk } from './types';
 
 type AuthStatus = {
   isLoggedIn: boolean;
@@ -29,7 +30,6 @@ const App: React.FC = () => {
     activeWorkspaceId,
     tabs,
     activeTabId,
-    messages,
     diffsByWorkspace,
     fileTreeByWorkspace,
     diffsLoadingByWorkspace,
@@ -52,6 +52,11 @@ const App: React.FC = () => {
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [showRightSidebar, setShowRightSidebar] = useState(true);
   const [diffHunksByTab, setDiffHunksByTab] = useState<Record<string, DiffHunk[]>>({});
+  
+  // AbortController for cancelling in-flight requests on workspace change
+  const workspaceLoadAbortRef = useRef<AbortController | null>(null);
+  // Track workspace version to prevent stale data overwrites
+  const workspaceVersionRef = useRef<number>(0);
 
   // Apply font settings from localStorage
   useEffect(() => {
@@ -136,7 +141,6 @@ const App: React.FC = () => {
   const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
   const activeTab = tabs.find(t => t.id === activeTabId);
   const activeConfig = activeWorkspaceId ? configsByWorkspace[activeWorkspaceId] : null;
-  const activeMessages = activeWorkspaceId ? messages[activeWorkspaceId] || [] : [];
   const activeDiffs = activeWorkspaceId ? diffsByWorkspace[activeWorkspaceId] || [] : [];
   const activeFileTree = activeWorkspaceId ? fileTreeByWorkspace[activeWorkspaceId] || [] : [];
   const isDiffsLoading = activeWorkspaceId ? diffsLoadingByWorkspace[activeWorkspaceId] || false : false;
@@ -163,26 +167,42 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!activeWorkspaceId) return;
-    let cancelled = false;
+    
+    // Cancel any in-flight requests from previous workspace
+    if (workspaceLoadAbortRef.current) {
+      workspaceLoadAbortRef.current.abort();
+    }
+    
+    // Create new abort controller and increment version
+    const abortController = new AbortController();
+    workspaceLoadAbortRef.current = abortController;
+    const currentVersion = ++workspaceVersionRef.current;
+    const currentWorkspaceId = activeWorkspaceId;
 
     const loadWorkspaceData = async () => {
-      actions.setWorkspaceDiffsLoading(activeWorkspaceId, true);
+      actions.setWorkspaceDiffsLoading(currentWorkspaceId, true);
       try {
         const [diffs, fileTree, config] = await Promise.all([
-          gitService.getWorkspaceDiffs(activeWorkspaceId),
-          gitService.getWorkspaceFileTree(activeWorkspaceId),
-          gitService.getWorkspaceConfig(activeWorkspaceId)
+          gitService.getWorkspaceDiffs(currentWorkspaceId),
+          gitService.getWorkspaceFileTree(currentWorkspaceId),
+          gitService.getWorkspaceConfig(currentWorkspaceId)
         ]);
-        if (cancelled) return;
-        actions.setWorkspaceDiffs(activeWorkspaceId, diffs);
-        actions.setWorkspaceFileTree(activeWorkspaceId, fileTree);
-        actions.setWorkspaceConfig(activeWorkspaceId, config);
+        
+        // Check if this request is still current (prevent stale data)
+        if (abortController.signal.aborted || currentVersion !== workspaceVersionRef.current) {
+          return;
+        }
+        
+        actions.setWorkspaceDiffs(currentWorkspaceId, diffs);
+        actions.setWorkspaceFileTree(currentWorkspaceId, fileTree);
+        actions.setWorkspaceConfig(currentWorkspaceId, config);
       } catch (err) {
+        if (abortController.signal.aborted) return;
         console.error(err);
         setError(err instanceof Error ? err.message : 'Failed to load workspace data');
       } finally {
-        if (!cancelled) {
-          actions.setWorkspaceDiffsLoading(activeWorkspaceId, false);
+        if (!abortController.signal.aborted && currentVersion === workspaceVersionRef.current) {
+          actions.setWorkspaceDiffsLoading(currentWorkspaceId, false);
         }
       }
     };
@@ -190,7 +210,7 @@ const App: React.FC = () => {
     loadWorkspaceData();
 
     return () => {
-      cancelled = true;
+      abortController.abort();
     };
   }, [activeWorkspaceId, actions]);
 
@@ -230,16 +250,6 @@ const App: React.FC = () => {
     setIsLoggingIn(false);
     setOAuthAuthUrl(undefined);
     oauthService.clearPendingFlow();
-  };
-
-  const handleLogout = async () => {
-    try {
-      await oauthService.logout();
-      setAuthStatus({ isLoggedIn: false, expiresIn: null });
-    } catch (err) {
-      console.error('Logout failed:', err);
-      setError(err instanceof Error ? err.message : 'Logout failed');
-    }
   };
 
   const handleAddWorkspace = (options?: { repoPath?: string; repoUrl?: string; name?: string; branch?: string; baseBranch?: string }) => {
@@ -368,31 +378,35 @@ const App: React.FC = () => {
       >
         <button
           onClick={() => setShowLeftSidebar(!showLeftSidebar)}
+          aria-label={showLeftSidebar ? 'Hide left sidebar' : 'Show left sidebar'}
+          aria-pressed={showLeftSidebar}
           className={`p-1.5 rounded transition-colors ${showLeftSidebar ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-white/30 hover:text-white/50'}`}
-          title="Toggle left sidebar"
         >
           <PanelLeft size={16} />
         </button>
         <button
           onClick={() => setShowRightSidebar(!showRightSidebar)}
+          aria-label={showRightSidebar ? 'Hide right sidebar' : 'Show right sidebar'}
+          aria-pressed={showRightSidebar}
           className={`p-1.5 rounded transition-colors ${showRightSidebar ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-white/30 hover:text-white/50'}`}
-          title="Toggle right sidebar"
         >
           <PanelRight size={16} />
         </button>
       </div>
 
       {showLeftSidebar && (
-        <Sidebar
-          workspaces={workspaces}
-          activeWorkspaceId={activeWorkspaceId}
-          onSelectWorkspace={actions.setActiveWorkspace}
-          onAddWorkspace={handleAddWorkspace}
-          onSettingsClick={() => setIsSettingsOpen(true)}
-          onNotesClick={() => handleAddTab('notes')}
-          width={leftSidebarWidth}
-          onResizeStart={() => setIsResizingLeft(true)}
-        />
+        <ErrorBoundary section="Sidebar">
+          <Sidebar
+            workspaces={workspaces}
+            activeWorkspaceId={activeWorkspaceId}
+            onSelectWorkspace={actions.setActiveWorkspace}
+            onAddWorkspace={handleAddWorkspace}
+            onSettingsClick={() => setIsSettingsOpen(true)}
+            onNotesClick={() => handleAddTab('notes')}
+            width={leftSidebarWidth}
+            onResizeStart={() => setIsResizingLeft(true)}
+          />
+        </ErrorBoundary>
       )}
 
       {/* Show login prompt if not authenticated */}
@@ -444,30 +458,38 @@ const App: React.FC = () => {
               location={activeWorkspace?.location || ''}
             />
 
-            {tabs.filter(t => t.type === 'chat').map(tab => (
-              <div key={tab.id} className={tab.id === activeTabId ? 'contents' : 'hidden'}>
-                <ChatInterface tabId={tab.id} />
-              </div>
-            ))}
+            <ErrorBoundary section="Chat">
+              {tabs.filter(t => t.type === 'chat').map(tab => (
+                <div key={tab.id} className={tab.id === activeTabId ? 'contents' : 'hidden'}>
+                  <ChatInterface tabId={tab.id} />
+                </div>
+              ))}
+            </ErrorBoundary>
             {activeTab?.type === 'notes' && activeWorkspace && (
-              <NotesEditor
-                notes={activeWorkspace.notes || ''}
-                onChange={(notes) => actions.updateWorkspaceNotes(activeWorkspace.id, notes)}
-              />
+              <InlineErrorBoundary fallbackMessage="Failed to load notes">
+                <NotesEditor
+                  notes={activeWorkspace.notes || ''}
+                  onChange={(notes) => actions.updateWorkspaceNotes(activeWorkspace.id, notes)}
+                />
+              </InlineErrorBoundary>
             )}
             {activeTab?.type === 'terminal' && (
-              <Terminal workspacePath={activeWorkspace?.workspacePath || activeWorkspace?.repoPath} />
+              <InlineErrorBoundary fallbackMessage="Terminal failed to load">
+                <Terminal workspacePath={activeWorkspace?.workspacePath || activeWorkspace?.repoPath} />
+              </InlineErrorBoundary>
             )}
             {tabs.filter(t => t.type === 'file').map(tab => (
               <div key={tab.id} className={tab.id === activeTabId ? 'contents' : 'hidden'}>
                 {tab.filePath && (
-                  <FileEditor
-                    filePath={tab.filePath}
-                    workspacePath={activeWorkspace?.workspacePath || activeWorkspace?.repoPath}
-                    language={tab.language}
-                    onDirtyChange={(isDirty) => actions.setTabDirty(tab.id, isDirty)}
-                    onSaveComplete={refreshDiffs}
-                  />
+                  <InlineErrorBoundary fallbackMessage="Failed to load file">
+                    <FileEditor
+                      filePath={tab.filePath}
+                      workspacePath={activeWorkspace?.workspacePath || activeWorkspace?.repoPath}
+                      language={tab.language}
+                      onDirtyChange={(isDirty) => actions.setTabDirty(tab.id, isDirty)}
+                      onSaveComplete={refreshDiffs}
+                    />
+                  </InlineErrorBoundary>
                 )}
               </div>
             ))}
@@ -476,27 +498,31 @@ const App: React.FC = () => {
               return (
                 <div key={tab.id} className={tab.id === activeTabId ? 'contents' : 'hidden'}>
                   {diff && (
-                    <DiffViewer
-                      diff={diff}
-                      hunks={diffHunksByTab[tab.id] || []}
-                    />
+                    <InlineErrorBoundary fallbackMessage="Failed to load diff">
+                      <DiffViewer
+                        diff={diff}
+                        hunks={diffHunksByTab[tab.id] || []}
+                      />
+                    </InlineErrorBoundary>
                   )}
                 </div>
               );
             })}
           </div>
           {showRightSidebar && (
-            <VersionControl
-              diffs={activeDiffs}
-              fileTree={activeFileTree}
-              isLoading={isDiffsLoading}
-              workspacePath={activeWorkspace?.workspacePath || activeWorkspace?.repoPath}
-              workspaceId={activeWorkspaceId || undefined}
-              width={rightSidebarWidth}
-              onResizeStart={() => setIsResizingRight(true)}
-              onOpenFile={handleOpenFile}
-              onOpenDiff={handleOpenDiff}
-            />
+            <ErrorBoundary section="Version Control">
+              <VersionControl
+                diffs={activeDiffs}
+                fileTree={activeFileTree}
+                isLoading={isDiffsLoading}
+                workspacePath={activeWorkspace?.workspacePath || activeWorkspace?.repoPath}
+                workspaceId={activeWorkspaceId || undefined}
+                width={rightSidebarWidth}
+                onResizeStart={() => setIsResizingRight(true)}
+                onOpenFile={handleOpenFile}
+                onOpenDiff={handleOpenDiff}
+              />
+            </ErrorBoundary>
           )}
         </main>
       ) : (
