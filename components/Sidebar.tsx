@@ -167,6 +167,12 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               <div className="space-y-0.5">
+                {fleetWorkspaces.length === 0 && searchQuery && (
+                  <div className="px-3 py-4 text-center">
+                    <Search size={20} className="mx-auto mb-2 text-white/20" />
+                    <p className="text-xs text-white/40">No workspaces matching "{searchQuery}"</p>
+                  </div>
+                )}
                 {fleetWorkspaces.map((ws, idx) => (
                   <button
                     key={ws.id}
@@ -193,7 +199,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         </span>
                       )}
                     </div>
-                    
+
                     <div className="flex items-center gap-2 text-[11px] text-white/30 pl-5.5">
                       <span className="truncate max-w-[100px]">{ws.location || 'Local'}</span>
                       <span className="text-white/10">•</span>
