@@ -152,6 +152,15 @@
       "name": "ai-task-1766476589536",
       "createdAt": 1766476589830,
       "baseBranch": "main"
+    },
+    "ws-1767028401353": {
+      "id": "ws-1767028401353",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1767028401353-985",
+      "repoPath": "/Users/jkneen/Documents/GitHub/ai-streaming-ui",
+      "branch": "ai-task-1767028401353",
+      "name": "ai-streaming-ui",
+      "createdAt": 1767028401503,
+      "baseBranch": "main"
     }
   }
 }

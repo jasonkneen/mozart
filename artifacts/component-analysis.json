@@ -1,0 +1,732 @@
+{
+  "timestamp": "2025-12-28T20:03:32.997Z",
+  "target": "/Users/jkneen/Documents/GitHub/ai-Mozart",
+  "files": [
+    {
+      "file": "App.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 8,
+        "hooks": 3,
+        "definitions": 42,
+        "imports": 32
+      }
+    },
+    {
+      "file": "components/AgentStatusIndicator.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 2,
+        "definitions": 8,
+        "imports": 7
+      }
+    },
+    {
+      "file": "components/AtMentionMenu.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 1,
+        "hooks": 1,
+        "definitions": 9,
+        "imports": 7
+      }
+    },
+    {
+      "file": "components/BranchSelector.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 5,
+        "hooks": 3,
+        "definitions": 14,
+        "imports": 11
+      }
+    },
+    {
+      "file": "components/ChatInputArea.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 3,
+        "hooks": 3,
+        "definitions": 24,
+        "imports": 16
+      }
+    },
+    {
+      "file": "components/ChatInterface.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 15,
+        "hooks": 8,
+        "definitions": 47,
+        "imports": 40
+      }
+    },
+    {
+      "file": "components/ChatMessage.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 2,
+        "hooks": 2,
+        "definitions": 16,
+        "imports": 17
+      }
+    },
+    {
+      "file": "components/ChatPanel.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 1,
+        "hooks": 2,
+        "definitions": 26,
+        "imports": 15
+      }
+    },
+    {
+      "file": "components/ChatPanelHeader.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 2,
+        "hooks": 0,
+        "definitions": 6,
+        "imports": 5
+      }
+    },
+    {
+      "file": "components/ChatTabBar.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 6,
+        "hooks": 2,
+        "definitions": 20,
+        "imports": 25
+      }
+    },
+    {
+      "file": "components/CodeBlock.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 1,
+        "hooks": 0,
+        "definitions": 7,
+        "imports": 5
+      }
+    },
+    {
+      "file": "components/CommandPalette.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 2,
+        "hooks": 3,
+        "definitions": 9,
+        "imports": 21
+      }
+    },
+    {
+      "file": "components/ConfigureScriptsDialog.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 14,
+        "hooks": 1,
+        "definitions": 13,
+        "imports": 10
+      }
+    },
+    {
+      "file": "components/ConnectedTerminal.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 1,
+        "hooks": 2,
+        "definitions": 5,
+        "imports": 7
+      }
+    },
+    {
+      "file": "components/ContextBadges.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 4,
+        "imports": 5
+      }
+    },
+    {
+      "file": "components/ContextExplorer.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 3,
+        "hooks": 1,
+        "definitions": 11,
+        "imports": 14
+      }
+    },
+    {
+      "file": "components/DiffViewer.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 5,
+        "hooks": 2,
+        "definitions": 18,
+        "imports": 15
+      }
+    },
+    {
+      "file": "components/EmptyChatState.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 4,
+        "imports": 2
+      }
+    },
+    {
+      "file": "components/EmptyRunState.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 1,
+        "hooks": 0,
+        "definitions": 2,
+        "imports": 1
+      }
+    },
+    {
+      "file": "components/ErrorBoundary.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 3,
+        "imports": 11
+      }
+    },
+    {
+      "file": "components/FileEditor.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 19,
+        "hooks": 5,
+        "definitions": 62,
+        "imports": 43
+      }
+    },
+    {
+      "file": "components/FilePicker.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 10,
+        "hooks": 2,
+        "definitions": 21,
+        "imports": 16
+      }
+    },
+    {
+      "file": "components/FileTreePanel.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 3,
+        "hooks": 1,
+        "definitions": 14,
+        "imports": 13
+      }
+    },
+    {
+      "file": "components/FilterDropdown.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 3,
+        "hooks": 2,
+        "definitions": 7,
+        "imports": 5
+      }
+    },
+    {
+      "file": "components/GitHubReposBrowser.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 9,
+        "hooks": 2,
+        "definitions": 13,
+        "imports": 18
+      }
+    },
+    {
+      "file": "components/InputAutocomplete.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 1,
+        "hooks": 3,
+        "definitions": 17,
+        "imports": 14
+      }
+    },
+    {
+      "file": "components/MainLayout.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 5,
+        "hooks": 4,
+        "definitions": 45,
+        "imports": 17
+      }
+    },
+    {
+      "file": "components/MessageActions.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 1,
+        "hooks": 0,
+        "definitions": 4,
+        "imports": 8
+      }
+    },
+    {
+      "file": "components/ModelSelector.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 1,
+        "definitions": 5,
+        "imports": 17
+      }
+    },
+    {
+      "file": "components/NotesEditor.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 1,
+        "hooks": 0,
+        "definitions": 2,
+        "imports": 1
+      }
+    },
+    {
+      "file": "components/OAuthCodeModal.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 6,
+        "hooks": 2,
+        "definitions": 13,
+        "imports": 11
+      }
+    },
+    {
+      "file": "components/PRInstructionsPanel.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 12,
+        "hooks": 2,
+        "definitions": 23,
+        "imports": 16
+      }
+    },
+    {
+      "file": "components/PlanProgress.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 2,
+        "imports": 5
+      }
+    },
+    {
+      "file": "components/RepoModal.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 9,
+        "hooks": 2,
+        "definitions": 21,
+        "imports": 10
+      }
+    },
+    {
+      "file": "components/ReviewPanel.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 11,
+        "hooks": 1,
+        "definitions": 16,
+        "imports": 17
+      }
+    },
+    {
+      "file": "components/RunTerminalPanel.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 3,
+        "hooks": 0,
+        "definitions": 10,
+        "imports": 7
+      }
+    },
+    {
+      "file": "components/SettingsModal.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 45,
+        "hooks": 4,
+        "definitions": 30,
+        "imports": 43
+      }
+    },
+    {
+      "file": "components/Sidebar.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 18,
+        "hooks": 1,
+        "definitions": 28,
+        "imports": 27
+      }
+    },
+    {
+      "file": "components/SlashCommandMenu.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 1,
+        "hooks": 2,
+        "definitions": 7,
+        "imports": 5
+      }
+    },
+    {
+      "file": "components/Terminal.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 3,
+        "hooks": 3,
+        "definitions": 6,
+        "imports": 8
+      }
+    },
+    {
+      "file": "components/TerminalEmulator.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 3,
+        "definitions": 3,
+        "imports": 8
+      }
+    },
+    {
+      "file": "components/ThinkingToggle.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 1,
+        "hooks": 0,
+        "definitions": 5,
+        "imports": 11
+      }
+    },
+    {
+      "file": "components/ToolApprovalCard.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 2,
+        "hooks": 0,
+        "definitions": 7,
+        "imports": 9
+      }
+    },
+    {
+      "file": "components/TopBar.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 14,
+        "hooks": 2,
+        "definitions": 34,
+        "imports": 37
+      }
+    },
+    {
+      "file": "components/VersionControl.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 11,
+        "hooks": 2,
+        "definitions": 22,
+        "imports": 26
+      }
+    },
+    {
+      "file": "components/WorkspaceSidebar.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 6,
+        "hooks": 1,
+        "definitions": 16,
+        "imports": 13
+      }
+    },
+    {
+      "file": "components/chat/BrailleSpinner.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 2,
+        "definitions": 2,
+        "imports": 3
+      }
+    },
+    {
+      "file": "components/chat/ConnectionStatus.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 2,
+        "imports": 2
+      }
+    },
+    {
+      "file": "components/chat/MCPStatus.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 2,
+        "hooks": 1,
+        "definitions": 4,
+        "imports": 4
+      }
+    },
+    {
+      "file": "components/chat/MessageFooter.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 2,
+        "hooks": 0,
+        "definitions": 6,
+        "imports": 5
+      }
+    },
+    {
+      "file": "components/chat/ModelSelector.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 3,
+        "hooks": 1,
+        "definitions": 4,
+        "imports": 7
+      }
+    },
+    {
+      "file": "components/chat/StreamingIndicator.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 2,
+        "definitions": 4,
+        "imports": 4
+      }
+    },
+    {
+      "file": "components/chat/ThinkingBlock.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 1,
+        "hooks": 0,
+        "definitions": 3,
+        "imports": 5
+      }
+    },
+    {
+      "file": "components/chat/ToolInvocationBlock.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 1,
+        "hooks": 1,
+        "definitions": 3,
+        "imports": 8
+      }
+    },
+    {
+      "file": "components/ui/EmptyState.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 7,
+        "imports": 3
+      }
+    },
+    {
+      "file": "components/ui/ErrorAlert.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 3,
+        "hooks": 0,
+        "definitions": 7,
+        "imports": 8
+      }
+    },
+    {
+      "file": "components/ui/badge.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 0,
+        "imports": 2
+      }
+    },
+    {
+      "file": "components/ui/button.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 0,
+        "imports": 2
+      }
+    },
+    {
+      "file": "components/ui/checkbox.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 1,
+        "hooks": 0,
+        "definitions": 1,
+        "imports": 3
+      }
+    },
+    {
+      "file": "components/ui/command.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 5,
+        "hooks": 7,
+        "definitions": 32,
+        "imports": 9
+      }
+    },
+    {
+      "file": "components/ui/dropdown-menu.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 3,
+        "hooks": 7,
+        "definitions": 29,
+        "imports": 7
+      }
+    },
+    {
+      "file": "components/ui/input.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 0,
+        "imports": 2
+      }
+    },
+    {
+      "file": "components/ui/label.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 0,
+        "imports": 2
+      }
+    },
+    {
+      "file": "components/ui/scroll-area.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 0,
+        "imports": 2
+      }
+    },
+    {
+      "file": "components/ui/skeleton.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 9,
+        "imports": 1
+      }
+    },
+    {
+      "file": "components/ui/textarea.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 0,
+        "imports": 2
+      }
+    },
+    {
+      "file": "components/ui/tooltip.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 8,
+        "imports": 1
+      }
+    },
+    {
+      "file": "constants.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 0,
+        "imports": 4
+      }
+    },
+    {
+      "file": "hooks/useTheme.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 3,
+        "definitions": 6,
+        "imports": 5
+      }
+    },
+    {
+      "file": "hooks/useToolApproval.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 5,
+        "definitions": 11,
+        "imports": 5
+      }
+    },
+    {
+      "file": "index.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 0,
+        "definitions": 0,
+        "imports": 5
+      }
+    },
+    {
+      "file": "services/store.tsx",
+      "issues": [],
+      "stats": {
+        "handlers": 0,
+        "hooks": 4,
+        "definitions": 5,
+        "imports": 11
+      }
+    }
+  ],
+  "summary": {
+    "total": 72,
+    "withIssues": 0,
+    "errors": 0,
+    "warnings": 0
+  }
+}

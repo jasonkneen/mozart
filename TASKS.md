@@ -1,3 +1,3 @@
 # TASKS
 
-✅ No report found.
+✅ No open test failures.

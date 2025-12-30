@@ -1,0 +1,110 @@
+{
+  "url": "http://127.0.0.1:3000",
+  "timestamp": "2025-12-28T18:03:01.542Z",
+  "summary": {
+    "total": 10,
+    "ok": 10,
+    "errors": 0,
+    "hidden": 0,
+    "disabled": 0
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Error: repoPath or repoUrl is required to create a workspace\n    at request (http://127.0.0.1:3000/services/gitService.ts:7:11)\n    at async create (http://127.0.0.1:3000/App.tsx:218:30)",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Error: repoPath or repoUrl is required to create a workspace\n    at request (http://127.0.0.1:3000/services/gitService.ts:7:11)\n    at async create (http://127.0.0.1:3000/App.tsx:218:30)"
+  ],
+  "elements": [
+    {
+      "type": "button",
+      "selector": "button >> nth=0",
+      "text": "Hide left sidebar",
+      "disabled": false,
+      "visible": true,
+      "status": "ok",
+      "error": null
+    },
+    {
+      "type": "button",
+      "selector": "button >> nth=1",
+      "text": "Hide right sidebar",
+      "disabled": false,
+      "visible": true,
+      "status": "ok",
+      "error": null
+    },
+    {
+      "type": "button",
+      "selector": "button >> nth=2",
+      "text": "New",
+      "disabled": false,
+      "visible": true,
+      "status": "ok",
+      "error": null
+    },
+    {
+      "type": "button",
+      "selector": "button >> nth=3",
+      "text": "Dismiss updates banner",
+      "disabled": false,
+      "visible": true,
+      "status": "ok",
+      "error": null
+    },
+    {
+      "type": "button",
+      "selector": "button >> nth=4",
+      "text": "Add repository",
+      "disabled": false,
+      "visible": true,
+      "status": "ok",
+      "error": null
+    },
+    {
+      "type": "button",
+      "selector": "button >> nth=5",
+      "text": "Settings",
+      "disabled": false,
+      "visible": true,
+      "status": "ok",
+      "error": null
+    },
+    {
+      "type": "button",
+      "selector": "button >> nth=6",
+      "text": "Open projectSelect a local repository to start orc",
+      "disabled": false,
+      "visible": true,
+      "status": "ok",
+      "error": null
+    },
+    {
+      "type": "button",
+      "selector": "button >> nth=7",
+      "text": "Clone from URLClone a repository from GitHub or ot",
+      "disabled": false,
+      "visible": true,
+      "status": "ok",
+      "error": null
+    },
+    {
+      "type": "button",
+      "selector": "button >> nth=8",
+      "text": "Quick startSpawn a new agent in a fresh workspace.",
+      "disabled": false,
+      "visible": true,
+      "status": "ok",
+      "error": null
+    },
+    {
+      "type": "input",
+      "inputType": "text",
+      "selector": "input >> nth=0",
+      "label": "Search workspaces",
+      "disabled": false,
+      "visible": true,
+      "status": "ok",
+      "error": null
+    }
+  ]
+}
