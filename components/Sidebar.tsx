@@ -156,7 +156,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 {/* New workspace button - inline with header */}
                 {!searchQuery && fleetIdx === 0 && (
                   <button
-                    onClick={() => onAddWorkspace()}
+                    onClick={() => handleOpenRepoModal('local')}
                     aria-label="Create new workspace"
                     className="flex items-center gap-1.5 px-2 py-1 text-white/40 hover:text-white text-xs font-medium rounded-lg hover:bg-white/10 transition-all"
                   >
@@ -167,6 +167,12 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               <div className="space-y-0.5">
+                {fleetWorkspaces.length === 0 && searchQuery && (
+                  <div className="px-3 py-4 text-center">
+                    <Search size={20} className="mx-auto mb-2 text-white/20" />
+                    <p className="text-xs text-white/40">No workspaces matching "{searchQuery}"</p>
+                  </div>
+                )}
                 {fleetWorkspaces.map((ws, idx) => (
                   <button
                     key={ws.id}
@@ -193,7 +199,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         </span>
                       )}
                     </div>
-                    
+
                     <div className="flex items-center gap-2 text-[11px] text-white/30 pl-5.5">
                       <span className="truncate max-w-[100px]">{ws.location || 'Local'}</span>
                       <span className="text-white/10">•</span>
@@ -288,7 +294,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   </button>
                   <button
                     role="menuitem"
-                    onClick={() => onAddWorkspace()}
+                    onClick={() => handleOpenRepoModal('local')}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors border-t border-white/5"
                   >
                     <Zap size={14} /> Quick start

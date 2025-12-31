@@ -563,7 +563,7 @@ const App: React.FC = () => {
             </button>
 
             <button
-              onClick={() => handleAddWorkspace()}
+              onClick={() => handleOpenRepoModal('local')}
               className="group flex flex-col items-start gap-3 p-6 bg-elevated hover:bg-hover border border-subtle hover:border-default rounded-xl transition-all hover:-translate-y-1 hover:shadow-xl text-left"
             >
               <div className="p-3 bg-white/5 rounded-lg group-hover:bg-white/10 transition-colors">

@@ -1,0 +1,473 @@
+{
+  "url": "http://127.0.0.1:3000",
+  "timestamp": "2025-12-28T19:08:10.867Z",
+  "appType": "AI Agent Orchestrator / Workspace Management Dashboard",
+  "scenarios": [
+    {
+      "name": "OAuth Login Flow - Click Login with Claude",
+      "status": "passed",
+      "steps": [
+        {
+          "action": "click",
+          "selector": "button:has-text('Login with Claude')",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 2000,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": null,
+      "validation": {
+        "passed": true,
+        "reason": "OAuth modal opened successfully with 'Enter Authorization Code' dialog showing the 3-step flow: (1) Open Authorization Page button, (2) Sign in instruction, (3) Paste code input field. This is the expected OAuth PKCE flow where user manually copies the authorization code."
+      }
+    },
+    {
+      "name": "Search Workspaces - Empty State",
+      "status": "passed",
+      "steps": [
+        {
+          "action": "click",
+          "selector": "input[placeholder*='Search']",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "type",
+          "selector": "input[placeholder*='Search']",
+          "text": "nonexistent-workspace",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 500,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": null,
+      "validation": {
+        "passed": true,
+        "reason": "The workspace list correctly shows 'No workspaces matching \"nonexistent-workspace\"' message with a search icon, indicating proper empty state handling when searching for a non-existent workspace."
+      }
+    },
+    {
+      "name": "Search Workspaces - Clear Search",
+      "status": "passed",
+      "steps": [
+        {
+          "action": "click",
+          "selector": "input[placeholder*='Search']",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "type",
+          "selector": "input[placeholder*='Search']",
+          "text": "test",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 300,
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "clear",
+          "selector": "input[placeholder*='Search']",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 300,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": null,
+      "validation": {
+        "passed": true,
+        "reason": "Search field is empty/cleared (visible at top of sidebar) and the full workspace list area is displayed with the WORKSPACES header and + New button visible. No search filter is active."
+      }
+    },
+    {
+      "name": "Search Workspaces - Special Characters",
+      "status": "passed",
+      "steps": [
+        {
+          "action": "click",
+          "selector": "input[placeholder*='Search']",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "type",
+          "selector": "input[placeholder*='Search']",
+          "text": "<script>alert('xss')</script>",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 500,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": null,
+      "validation": {
+        "passed": true,
+        "reason": "The XSS payload <script>alert('xss')</script> is displayed as plain text in both the search input and the 'No workspaces matching' message, demonstrating proper HTML escaping. No JavaScript alert was triggered, confirming the application safely handles special characters without XSS vulnerability."
+      }
+    },
+    {
+      "name": "Create New Workspace - Unauthenticated",
+      "status": "passed",
+      "steps": [
+        {
+          "action": "click",
+          "selector": "button:has-text('New')",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 500,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": null,
+      "validation": {
+        "passed": true,
+        "reason": "The screenshot shows the workspace creation modal/form is displayed with fields for Local Repo Path, Workspace Name, Branch, and Base Branch, along with Cancel and Create workspace buttons. The page text also indicates a 'Login with Claude' option is available, showing that while unauthenticated users can access the workspace creation form, they are also prompted to authenticate. This matches the expected outcome of showing a modal/form to create workspace while indicating authentication may be required."
+      }
+    },
+    {
+      "name": "Add Repository Button Click",
+      "status": "passed",
+      "steps": [
+        {
+          "action": "click",
+          "selector": "button:has-text('Add repository')",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 500,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": null,
+      "validation": {
+        "passed": true,
+        "reason": "Clicking 'Add repository' expanded a submenu showing repository options: 'Open project', 'Clone from URL', 'Browse GitHub', 'Quick start', and 'Add repository'. The menu is visible in the bottom-left corner, indicating the button successfully triggered the expected UI response for adding repositories."
+      }
+    },
+    {
+      "name": "Settings Button Navigation",
+      "status": "passed",
+      "steps": [
+        {
+          "action": "click",
+          "selector": "button:has-text('Settings')",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 500,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": null,
+      "validation": {
+        "passed": true,
+        "reason": "Settings modal is open and displaying application configuration options including Chat settings (Default Model, Desktop Notifications, Sound Effects, Show Thinking, Stream Responses), with navigation sidebar showing categories: Chat, Appearance, Git, Environment, Claude Code, Account, MCP Servers, Experimental, Keyboard Shortcuts, Feedback, Changelog, and Documentation"
+      }
+    },
+    {
+      "name": "Dismiss Updates Notification",
+      "status": "failed",
+      "steps": [],
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.UPDATES ~ button, [class*=\\'close\\'], button[aria-label=\\'Close\\'], button[aria-label=\\'Dismiss\\']').first()\u001b[22m\n"
+    },
+    {
+      "name": "Sidebar Layout Toggle - Left Button",
+      "status": "failed",
+      "steps": [
+        {
+          "action": "click",
+          "selector": "button:nth-of-type(1)",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 300,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": "Cannot test sidebar layout toggle - user is not authenticated. The login screen is displayed with 'Connect to Claude' prompt, showing only layout toggle icons in the top-left corner but no sidebar content to collapse/expand.",
+      "validation": {
+        "passed": false,
+        "reason": "Cannot test sidebar layout toggle - user is not authenticated. The login screen is displayed with 'Connect to Claude' prompt, showing only layout toggle icons in the top-left corner but no sidebar content to collapse/expand."
+      }
+    },
+    {
+      "name": "Sidebar Layout Toggle - Right Button",
+      "status": "failed",
+      "steps": [
+        {
+          "action": "click",
+          "selector": "button:nth-of-type(2)",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 300,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": "The sidebar shows only the standard layout view with WORKSPACES header, search bar, and bottom actions (Add repository, Settings). There's no visible indication that the layout toggled to an alternate view - the sidebar appears unchanged from its default state. The two layout toggle icons are visible at the top of the sidebar, but the layout itself hasn't visibly changed.",
+      "validation": {
+        "passed": false,
+        "reason": "The sidebar shows only the standard layout view with WORKSPACES header, search bar, and bottom actions (Add repository, Settings). There's no visible indication that the layout toggled to an alternate view - the sidebar appears unchanged from its default state. The two layout toggle icons are visible at the top of the sidebar, but the layout itself hasn't visibly changed."
+      }
+    },
+    {
+      "name": "Search with Enter Key",
+      "status": "passed",
+      "steps": [
+        {
+          "action": "click",
+          "selector": "input[placeholder*='Search']",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "type",
+          "selector": "input[placeholder*='Search']",
+          "text": "workspace",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "pressEnter",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 500,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": null,
+      "validation": {
+        "passed": true,
+        "reason": "Search executed successfully - the search field shows 'workspace' query and the UI displays 'No workspaces matching \"workspace\"' which confirms the search filter was applied and returned appropriate results (empty set since no workspaces exist)"
+      }
+    },
+    {
+      "name": "Empty Workspaces State Display",
+      "status": "passed",
+      "steps": [
+        {
+          "action": "wait",
+          "ms": 1000,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": null,
+      "validation": {
+        "passed": true,
+        "reason": "The 'WORKSPACES' header is visible in the sidebar with an empty workspace list area below it (no workspace items shown), which matches the expected empty state display."
+      }
+    },
+    {
+      "name": "Login Button Hover State",
+      "status": "passed",
+      "steps": [
+        {
+          "action": "click",
+          "selector": "button:has-text('Login with Claude')",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 100,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": null,
+      "validation": {
+        "passed": true,
+        "reason": "The 'Open Authorization Page' button shows clear hover/focus state styling with a distinct blue background color (#3B82F6), darker border, and external link icon - providing visible interactive feedback before triggering OAuth"
+      }
+    },
+    {
+      "name": "Responsive Sidebar Width",
+      "status": "passed",
+      "steps": [
+        {
+          "action": "wait",
+          "ms": 500,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": null,
+      "validation": {
+        "passed": true,
+        "reason": "Sidebar maintains proper width (~280px) with all elements visible. The WORKSPACES header, search bar, + New button, Updates notification panel, Add repository, and Settings items are all properly displayed without overlapping. The sidebar has clean separation from the main content area."
+      }
+    },
+    {
+      "name": "Login Flow - OAuth Popup Blocked",
+      "status": "passed",
+      "steps": [
+        {
+          "action": "click",
+          "selector": "button:has-text('Login with Claude')",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 3000,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": null,
+      "validation": {
+        "passed": true,
+        "reason": "Application gracefully handles popup blocked scenario by displaying a fallback modal with manual authorization flow: (1) 'Open Authorization Page' button to manually open the auth page, (2) 'Copy URL' option, (3) text input field to paste the authorization code manually, and (4) 'Complete Login' button. This is proper UX for popup-blocked situations."
+      }
+    },
+    {
+      "name": "Multiple Rapid Clicks on Login",
+      "status": "failed",
+      "steps": [
+        {
+          "action": "click",
+          "selector": "button:has-text('Login with Claude')",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 100,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\\'Login with Claude\\')').first()\u001b[22m\n"
+    },
+    {
+      "name": "Keyboard Navigation - Tab Through Elements",
+      "status": "failed",
+      "steps": [
+        {
+          "action": "click",
+          "selector": "body",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 200,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": "Cannot determine if test passed from static screenshot. The test requires verifying Tab key navigation through interactive elements in logical order, but the screenshot shows no visible focus indicators on any element. To properly verify keyboard navigation: 1) Need to see focus ring/outline on the currently focused element, 2) Need to verify focus moves in logical order (search → New button → dismiss button → Add repository → Settings → Login with Claude). The screenshot appears to be taken without any element focused, so we cannot confirm keyboard accessibility is working.",
+      "validation": {
+        "passed": false,
+        "reason": "Cannot determine if test passed from static screenshot. The test requires verifying Tab key navigation through interactive elements in logical order, but the screenshot shows no visible focus indicators on any element. To properly verify keyboard navigation: 1) Need to see focus ring/outline on the currently focused element, 2) Need to verify focus moves in logical order (search → New button → dismiss button → Add repository → Settings → Login with Claude). The screenshot appears to be taken without any element focused, so we cannot confirm keyboard accessibility is working."
+      }
+    },
+    {
+      "name": "Updates Banner - Scratchpad Link",
+      "status": "passed",
+      "steps": [
+        {
+          "action": "waitForText",
+          "text": "Scratchpad available",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 300,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": null,
+      "validation": {
+        "passed": true,
+        "reason": "Updates banner is visible in the sidebar showing 'UPDATES' header with blue indicator dot and scratchpad notification text 'Scratchpad available. Share notes with @notes.' - the @notes mention is displayed as expected"
+      }
+    },
+    {
+      "name": "Main Content Area - Unauthenticated State",
+      "status": "passed",
+      "steps": [
+        {
+          "action": "waitForText",
+          "text": "Connect to Claude",
+          "status": "ok",
+          "error": null
+        },
+        {
+          "action": "wait",
+          "ms": 300,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": null,
+      "validation": {
+        "passed": true,
+        "reason": "Main content area displays 'Connect to Claude' prompt with descriptive text 'Login with your Anthropic account to start using Mozart AI Orchestrator.' and a 'Login with Claude' button, exactly matching the expected unauthenticated state."
+      }
+    },
+    {
+      "name": "Page Load Performance",
+      "status": "passed",
+      "steps": [
+        {
+          "action": "wait",
+          "ms": 2000,
+          "status": "ok",
+          "error": null
+        }
+      ],
+      "error": null,
+      "validation": {
+        "passed": true,
+        "reason": "Page has fully rendered with all expected UI elements visible: sidebar with WORKSPACES header, search box, '+ New' button, UPDATES notification, 'Add repository' and 'Settings' options in bottom-left, and the main content area showing 'Connect to Claude' login prompt with 'Login with Claude' button."
+      }
+    }
+  ]
+}
