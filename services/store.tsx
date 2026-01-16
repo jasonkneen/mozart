@@ -1,5 +1,27 @@
-import React, { createContext, useContext, useEffect, useMemo, useReducer } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
 import { FileDiff, FileNode, Message, Tab, Workspace } from '../types';
+
+// ==========================================
+// Constants
+// ==========================================
+
+/** Maximum messages per tab before old messages are trimmed */
+const MAX_MESSAGES_PER_TAB = 100;
+
+/** Debounce delay for localStorage writes (ms) */
+const STORAGE_DEBOUNCE_MS = 500;
+
+// ==========================================
+// Types
+// ==========================================
+
+/** Workspace configuration type */
+type WorkspaceConfig = {
+  model?: string;
+  systemPrompt?: string;
+  maxTokens?: number;
+  temperature?: number;
+};
 
 type StoreState = {
   workspaces: Workspace[];
@@ -10,7 +32,7 @@ type StoreState = {
   diffsByWorkspace: Record<string, FileDiff[]>;
   fileTreeByWorkspace: Record<string, FileNode[]>;
   diffsLoadingByWorkspace: Record<string, boolean>;
-  configsByWorkspace: Record<string, any>;
+  configsByWorkspace: Record<string, WorkspaceConfig>;
 };
 
 type StoreActions = {
@@ -29,7 +51,7 @@ type StoreActions = {
   setWorkspaceFileTree: (workspaceId: string, fileTree: FileNode[]) => void;
   setWorkspaceDiffsLoading: (workspaceId: string, isLoading: boolean) => void;
   updateWorkspaceNotes: (workspaceId: string, notes: string) => void;
-  setWorkspaceConfig: (workspaceId: string, config: any) => void;
+  setWorkspaceConfig: (workspaceId: string, config: WorkspaceConfig) => void;
 };
 
 type StoreContextValue = {
@@ -53,7 +75,7 @@ type StoreAction =
   | { type: 'set-workspace-file-tree'; workspaceId: string; fileTree: FileNode[] }
   | { type: 'set-workspace-diffs-loading'; workspaceId: string; isLoading: boolean }
   | { type: 'update-workspace-notes'; workspaceId: string; notes: string }
-  | { type: 'set-workspace-config'; workspaceId: string; config: any };
+  | { type: 'set-workspace-config'; workspaceId: string; config: WorkspaceConfig };
 
 const STORAGE_KEY = 'conductor.store.v2';
 
@@ -168,9 +190,14 @@ const reducer = (state: StoreState, action: StoreAction): StoreState => {
     }
     case 'add-tab-message': {
       const existing = state.messagesByTab[action.tabId] || [];
+      // Add new message and trim to max limit (keep most recent)
+      const updated = [...existing, action.message];
+      const trimmed = updated.length > MAX_MESSAGES_PER_TAB
+        ? updated.slice(-MAX_MESSAGES_PER_TAB)
+        : updated;
       return {
         ...state,
-        messagesByTab: { ...state.messagesByTab, [action.tabId]: [...existing, action.message] }
+        messagesByTab: { ...state.messagesByTab, [action.tabId]: trimmed }
       };
     }
     case 'clear-tab-messages': {
@@ -261,14 +288,54 @@ export const ConductorStoreProvider: React.FC<{ children: React.ReactNode }> = (
     }
   });
 
-  useEffect(() => {
+  // Debounce localStorage writes to reduce I/O overhead
+  const saveTimeoutRef = useRef<number | null>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const saveToStorage = useCallback(() => {
     if (typeof window === 'undefined') return;
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stateRef.current));
     } catch (error) {
       console.warn('Failed to persist local store state', error);
     }
-  }, [state]);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Clear any pending save
+    if (saveTimeoutRef.current !== null) {
+      window.clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Schedule debounced save
+    saveTimeoutRef.current = window.setTimeout(saveToStorage, STORAGE_DEBOUNCE_MS);
+
+    // Cleanup on unmount
+    return () => {
+      if (saveTimeoutRef.current !== null) {
+        window.clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [state, saveToStorage]);
+
+  // Also save immediately on page unload to prevent data loss
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleBeforeUnload = () => {
+      // Cancel pending save and save immediately
+      if (saveTimeoutRef.current !== null) {
+        window.clearTimeout(saveTimeoutRef.current);
+      }
+      saveToStorage();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [saveToStorage]);
 
   const actions = useMemo<StoreActions>(
     () => ({

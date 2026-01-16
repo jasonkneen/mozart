@@ -83,9 +83,16 @@ const App: React.FC = () => {
       }
     };
     applyFontSettings();
-    // Re-apply when settings modal closes (settings saved)
-    const interval = setInterval(applyFontSettings, 1000);
-    return () => clearInterval(interval);
+    // Listen for settings changes via custom event (no polling needed)
+    const handleSettingsChange = () => applyFontSettings();
+    window.addEventListener('mozart-settings-changed', handleSettingsChange);
+    // Also listen for storage changes from other tabs
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'mozart-settings') applyFontSettings();
+    });
+    return () => {
+      window.removeEventListener('mozart-settings-changed', handleSettingsChange);
+    };
   }, []);
 
   useEffect(() => {

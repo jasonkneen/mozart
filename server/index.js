@@ -31,6 +31,56 @@ const PlanResponseSchema = z.object({
 });
 
 // ==========================================
+// Input Validation Schemas
+// ==========================================
+
+const CreateWorkspaceSchema = z.object({
+  repoPath: z.string().min(1, 'repoPath is required'),
+  repoUrl: z.string().url().optional(),
+  branch: z.string().optional(),
+  name: z.string().optional(),
+});
+
+const BranchExistsSchema = z.object({
+  branch: z.string().min(1, 'branch is required'),
+  repoPath: z.string().optional(),
+  repoUrl: z.string().url().optional(),
+}).refine(
+  data => data.repoPath || data.repoUrl,
+  { message: 'Either repoPath or repoUrl is required' }
+);
+
+const ChatRequestSchema = z.object({
+  messages: z.array(z.object({
+    role: z.enum(['user', 'assistant', 'system']),
+    content: z.string(),
+  })).min(1, 'At least one message is required'),
+  workspacePath: z.string().optional(),
+  model: z.string().optional(),
+  thinkingLevel: z.enum(['none', 'think', 'megathink']).optional(),
+  systemPrompt: z.string().optional(),
+  planMode: z.boolean().optional(),
+});
+
+const FileWriteSchema = z.object({
+  path: z.string().min(1, 'path is required'),
+  content: z.string(),
+});
+
+/**
+ * Validate request body against a Zod schema
+ * Returns { success: true, data } or { success: false, error }
+ */
+const validateBody = (schema, body) => {
+  const result = schema.safeParse(body);
+  if (!result.success) {
+    const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+    return { success: false, error: errors };
+  }
+  return { success: true, data: result.data };
+};
+
+// ==========================================
 // Tool Approval System (AI SDK 6.0)
 // ==========================================
 
@@ -128,6 +178,126 @@ const WORKSPACES_ROOT = process.env.CONDUCTOR_WORKSPACES_ROOT || path.join(os.ho
 const REPOS_ROOT = process.env.CONDUCTOR_REPOS_ROOT || path.join(os.homedir(), 'conductor', 'repos');
 const STATE_PATH = process.env.CONDUCTOR_STATE_PATH || path.join(__dirname, 'state.json');
 
+// ==========================================
+// Security: Path Validation
+// ==========================================
+
+// Allowed base directories for file access
+const ALLOWED_FILE_BASES = () => [
+  WORKSPACES_ROOT,
+  REPOS_ROOT,
+  os.homedir(), // Allow browsing home directory
+];
+
+/**
+ * Validate that a path is within allowed directories (prevents path traversal)
+ * @param {string} userPath - The path provided by the user
+ * @param {string[]} allowedBases - Array of allowed base directories
+ * @returns {string} - The validated absolute path
+ * @throws {Error} - If path traversal is detected
+ */
+const validatePath = (userPath, allowedBases = ALLOWED_FILE_BASES()) => {
+  if (!userPath || typeof userPath !== 'string') {
+    throw new Error('Invalid path');
+  }
+
+  // Expand ~ to home directory
+  let expandedPath = userPath;
+  if (expandedPath.startsWith('~')) {
+    expandedPath = expandedPath.replace(/^~/, os.homedir());
+  }
+
+  // Resolve to absolute path and normalize
+  const resolved = path.resolve(expandedPath);
+  const normalized = path.normalize(resolved);
+
+  // Check if path is within any allowed base
+  const isAllowed = allowedBases.some(base => {
+    const normalizedBase = path.normalize(path.resolve(base));
+    return normalized.startsWith(normalizedBase + path.sep) || normalized === normalizedBase;
+  });
+
+  if (!isAllowed) {
+    throw new Error('Access denied: path outside allowed directories');
+  }
+
+  return normalized;
+};
+
+/**
+ * Validate workspace path specifically
+ */
+const validateWorkspacePath = (userPath) => {
+  return validatePath(userPath, [WORKSPACES_ROOT, REPOS_ROOT]);
+};
+
+// ==========================================
+// Security: Rate Limiting
+// ==========================================
+
+/** Rate limit configuration */
+const RATE_LIMIT_CONFIG = {
+  windowMs: 60 * 1000, // 1 minute window
+  maxRequests: 100,     // Max requests per window
+  chatMaxRequests: 20,  // Lower limit for chat endpoint (more expensive)
+};
+
+/** In-memory rate limit store: Map<clientIP, { count, windowStart }> */
+const rateLimitStore = new Map();
+
+/**
+ * Clean up expired rate limit entries (runs periodically)
+ */
+const cleanupRateLimits = () => {
+  const now = Date.now();
+  for (const [ip, data] of rateLimitStore.entries()) {
+    if (now - data.windowStart > RATE_LIMIT_CONFIG.windowMs) {
+      rateLimitStore.delete(ip);
+    }
+  }
+};
+
+// Cleanup every 5 minutes
+setInterval(cleanupRateLimits, 5 * 60 * 1000);
+
+/**
+ * Check rate limit for a client
+ * @param {string} clientIP - Client IP address
+ * @param {number} maxRequests - Max requests allowed in window
+ * @returns {{ allowed: boolean, remaining: number, resetIn: number }}
+ */
+const checkRateLimit = (clientIP, maxRequests = RATE_LIMIT_CONFIG.maxRequests) => {
+  const now = Date.now();
+  const existing = rateLimitStore.get(clientIP);
+
+  if (!existing || (now - existing.windowStart) > RATE_LIMIT_CONFIG.windowMs) {
+    // New window
+    rateLimitStore.set(clientIP, { count: 1, windowStart: now });
+    return { allowed: true, remaining: maxRequests - 1, resetIn: RATE_LIMIT_CONFIG.windowMs };
+  }
+
+  if (existing.count >= maxRequests) {
+    const resetIn = RATE_LIMIT_CONFIG.windowMs - (now - existing.windowStart);
+    return { allowed: false, remaining: 0, resetIn };
+  }
+
+  existing.count++;
+  return {
+    allowed: true,
+    remaining: maxRequests - existing.count,
+    resetIn: RATE_LIMIT_CONFIG.windowMs - (now - existing.windowStart)
+  };
+};
+
+/**
+ * Get client IP from request
+ */
+const getClientIP = (req) => {
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+         req.socket?.remoteAddress ||
+         'unknown';
+};
+
 // Persistent storage for pending OAuth flows
 const PENDING_FLOWS_PATH = path.join(os.tmpdir(), 'mozart-oauth-flows.json');
 
@@ -188,8 +358,28 @@ const loadState = async () => {
   }
 };
 
+/**
+ * Atomically save state using write-to-temp + rename pattern
+ * This prevents corruption if the process crashes during write
+ */
 const saveState = async (state) => {
-  await writeFile(STATE_PATH, JSON.stringify(state, null, 2));
+  const tempPath = STATE_PATH + '.tmp.' + Date.now();
+  try {
+    // Write to temporary file first
+    await writeFile(tempPath, JSON.stringify(state, null, 2));
+    // Atomic rename (on same filesystem, rename is atomic)
+    const { rename } = await import('node:fs/promises');
+    await rename(tempPath, STATE_PATH);
+  } catch (error) {
+    // Clean up temp file if rename failed
+    try {
+      const { unlink } = await import('node:fs/promises');
+      await unlink(tempPath);
+    } catch {
+      // Ignore cleanup errors
+    }
+    throw error;
+  }
 };
 
 const git = async (args, cwd) => {
@@ -467,17 +657,39 @@ const handleRequest = async (req, res) => {
   if (!url) return sendError(res, 404, 'Not found');
   const parsed = new URL(url, `http://localhost:${PORT}`);
 
+  // Health check (exempt from rate limiting)
   if (parsed.pathname === '/api/health') {
     return sendJson(res, 200, { ok: true });
+  }
+
+  // Rate limiting
+  const clientIP = getClientIP(req);
+  const isChat = parsed.pathname === '/api/chat';
+  const maxReqs = isChat ? RATE_LIMIT_CONFIG.chatMaxRequests : RATE_LIMIT_CONFIG.maxRequests;
+  const rateLimit = checkRateLimit(clientIP, maxReqs);
+
+  // Add rate limit headers
+  res.setHeader('X-RateLimit-Limit', maxReqs);
+  res.setHeader('X-RateLimit-Remaining', rateLimit.remaining);
+  res.setHeader('X-RateLimit-Reset', Math.ceil(rateLimit.resetIn / 1000));
+
+  if (!rateLimit.allowed) {
+    res.setHeader('Retry-After', Math.ceil(rateLimit.resetIn / 1000));
+    return sendError(res, 429, 'Too many requests. Please try again later.');
   }
 
   if (parsed.pathname === '/api/file' && method === 'GET') {
     try {
       const filePath = parsed.searchParams.get('path');
       if (!filePath) return sendError(res, 400, 'path is required');
-      const content = await readFile(filePath, 'utf8');
+      // SECURITY: Validate path is within allowed directories
+      const validatedPath = validatePath(filePath);
+      const content = await readFile(validatedPath, 'utf8');
       return sendJson(res, 200, { content });
     } catch (error) {
+      if (error.message.includes('Access denied')) {
+        return sendError(res, 403, error.message);
+      }
       return sendError(res, 404, 'File not found');
     }
   }
@@ -487,9 +699,11 @@ const handleRequest = async (req, res) => {
     try {
       const filePath = parsed.searchParams.get('path');
       if (!filePath) return sendError(res, 400, 'path is required');
+      // SECURITY: Validate path is within allowed directories
+      const validatedPath = validatePath(filePath);
 
-      const content = await readFile(filePath);
-      const ext = path.extname(filePath).toLowerCase();
+      const content = await readFile(validatedPath);
+      const ext = path.extname(validatedPath).toLowerCase();
 
       // Determine MIME type
       const mimeTypes = {
@@ -527,6 +741,9 @@ const handleRequest = async (req, res) => {
       });
       return res.end(content);
     } catch (error) {
+      if (error.message.includes('Access denied')) {
+        return sendError(res, 403, error.message);
+      }
       return sendError(res, 404, 'File not found');
     }
   }
@@ -534,11 +751,19 @@ const handleRequest = async (req, res) => {
   if (parsed.pathname === '/api/file' && method === 'POST') {
     try {
       const body = await readJsonBody(req);
-      if (!body?.path) return sendError(res, 400, 'path is required');
-      if (typeof body.content !== 'string') return sendError(res, 400, 'content is required');
-      await writeFile(body.path, body.content, 'utf8');
+      // Validate input
+      const validation = validateBody(FileWriteSchema, body);
+      if (!validation.success) {
+        return sendError(res, 400, validation.error);
+      }
+      // SECURITY: Validate path is within allowed directories (write restricted to workspaces)
+      const validatedPath = validateWorkspacePath(validation.data.path);
+      await writeFile(validatedPath, validation.data.content, 'utf8');
       return sendJson(res, 200, { success: true });
     } catch (error) {
+      if (error.message.includes('Access denied')) {
+        return sendError(res, 403, error.message);
+      }
       return sendError(res, 500, error.message || 'Failed to save file');
     }
   }
@@ -549,15 +774,9 @@ const handleRequest = async (req, res) => {
 
   if (parsed.pathname === '/api/files/browse' && method === 'GET') {
     try {
-      let requestedPath = parsed.searchParams.get('path') || '~';
-
-      // Expand ~ to home directory
-      if (requestedPath.startsWith('~')) {
-        requestedPath = requestedPath.replace(/^~/, os.homedir());
-      }
-
-      // Resolve to absolute path
-      const absolutePath = path.resolve(requestedPath);
+      const requestedPath = parsed.searchParams.get('path') || '~';
+      // SECURITY: Validate path is within allowed directories
+      const absolutePath = validatePath(requestedPath);
 
       // Read directory contents
       const dirEntries = await readdir(absolutePath, { withFileTypes: true });
@@ -581,6 +800,9 @@ const handleRequest = async (req, res) => {
         entries
       });
     } catch (error) {
+      if (error.message.includes('Access denied')) {
+        return sendError(res, 403, error.message);
+      }
       return sendError(res, 500, error.message || 'Failed to browse directory');
     }
   }
@@ -591,28 +813,32 @@ const handleRequest = async (req, res) => {
 
   if (parsed.pathname === '/api/shell/open-folder' && method === 'GET') {
     try {
-      let folderPath = parsed.searchParams.get('path') || '';
-      if (folderPath.startsWith('~')) {
-        folderPath = folderPath.replace(/^~/, os.homedir());
-      }
+      const folderPath = parsed.searchParams.get('path') || '';
+      // SECURITY: Validate path is within allowed directories
+      const validatedPath = validatePath(folderPath);
       // macOS: open in Finder
-      await execFileAsync('open', [folderPath]);
+      await execFileAsync('open', [validatedPath]);
       return sendJson(res, 200, { success: true });
     } catch (error) {
+      if (error.message.includes('Access denied')) {
+        return sendError(res, 403, error.message);
+      }
       return sendError(res, 500, error.message || 'Failed to open folder');
     }
   }
 
   if (parsed.pathname === '/api/shell/open-terminal' && method === 'GET') {
     try {
-      let folderPath = parsed.searchParams.get('path') || '';
-      if (folderPath.startsWith('~')) {
-        folderPath = folderPath.replace(/^~/, os.homedir());
-      }
+      const folderPath = parsed.searchParams.get('path') || '';
+      // SECURITY: Validate path is within allowed directories
+      const validatedPath = validatePath(folderPath);
       // macOS: open Terminal.app at the specified directory
-      await execFileAsync('open', ['-a', 'Terminal', folderPath]);
+      await execFileAsync('open', ['-a', 'Terminal', validatedPath]);
       return sendJson(res, 200, { success: true });
     } catch (error) {
+      if (error.message.includes('Access denied')) {
+        return sendError(res, 403, error.message);
+      }
       return sendError(res, 500, error.message || 'Failed to open terminal');
     }
   }
@@ -1096,7 +1322,12 @@ Be thorough in your analysis. A good plan now saves debugging later.`;
   if (parsed.pathname === '/api/workspaces' && method === 'POST') {
     try {
       const body = await readJsonBody(req);
-      const workspace = await createWorkspace(body);
+      // Validate input
+      const validation = validateBody(CreateWorkspaceSchema, body);
+      if (!validation.success) {
+        return sendError(res, 400, validation.error);
+      }
+      const workspace = await createWorkspace(validation.data);
       return sendJson(res, 200, workspace);
     } catch (error) {
       return sendError(res, 400, error.message || 'Failed to create workspace');
@@ -1106,14 +1337,17 @@ Be thorough in your analysis. A good plan now saves debugging later.`;
   if (parsed.pathname === '/api/repos/branch-exists' && method === 'POST') {
     try {
       const body = await readJsonBody(req);
-      if (!body?.branch) {
-        return sendError(res, 400, 'branch is required');
+      // Validate input
+      const validation = validateBody(BranchExistsSchema, body);
+      if (!validation.success) {
+        return sendError(res, 400, validation.error);
       }
-      if (body.repoUrl) {
-        const exists = await branchExistsRemote(body.repoUrl, body.branch);
+      const { branch, repoUrl, repoPath } = validation.data;
+      if (repoUrl) {
+        const exists = await branchExistsRemote(repoUrl, branch);
         return sendJson(res, 200, { exists });
       }
-      if (!body.repoPath) {
+      if (!repoPath) {
         return sendError(res, 400, 'repoPath or repoUrl is required');
       }
       const repoRoot = await resolveRepoRoot(body.repoPath);

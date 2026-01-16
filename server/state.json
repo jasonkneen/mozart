@@ -161,6 +161,15 @@
       "name": "ai-streaming-ui",
       "createdAt": 1767028401503,
       "baseBranch": "main"
+    },
+    "ws-1767364528131": {
+      "id": "ws-1767364528131",
+      "path": "/Users/jkneen/conductor/workspaces/ai-task-1767364528131-274",
+      "repoPath": "/Users/jkneen/Documents/GitHub/ai-Mozart",
+      "branch": "ai-task-1767364528131",
+      "name": "ai-task-1767364528131",
+      "createdAt": 1767364528239,
+      "baseBranch": "main"
     }
   }
 }

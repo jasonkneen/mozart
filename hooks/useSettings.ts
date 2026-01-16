@@ -1,5 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 
+/** MCP Server configuration */
+export interface McpServerConfig {
+  name: string;
+  url: string;
+  enabled: boolean;
+  apiKey?: string;
+}
+
 export interface Settings {
   chat: {
     defaultModel: string;
@@ -48,7 +56,7 @@ export interface Settings {
     parallelTools: boolean;
     ultraThinking: boolean;
     mcpServers: boolean;
-    configuredServers: any[];
+    configuredServers: McpServerConfig[];
   };
 }
 
@@ -143,6 +151,8 @@ export function useSettings() {
         }
       };
       localStorage.setItem('mozart-settings', JSON.stringify(newSettings));
+      // Dispatch custom event so App.tsx can react without polling
+      window.dispatchEvent(new CustomEvent('mozart-settings-changed'));
       return newSettings;
     });
   }, []);

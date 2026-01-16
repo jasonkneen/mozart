@@ -25,22 +25,70 @@ const SCOPES = 'user:profile user:inference';
 // Storage
 // ==========================================
 
-function getEncryptionKey() {
-  const machineId = process.env.HOSTNAME || process.env.COMPUTERNAME || 'default-machine';
-  return createHash('sha256').update(machineId + 'cluso-oauth').digest();
-}
-
 function getOAuthDir() {
-  return join(process.env.HOME || homedir(), '.cluso');
+  return join(process.env.HOME || homedir(), '.mozart');
 }
 
 function getOAuthConfigPath() {
   return join(getOAuthDir(), 'oauth-config.json');
 }
 
+function getKeyPath() {
+  return join(getOAuthDir(), '.encryption-key');
+}
+
+/**
+ * Get or create a secure encryption key
+ * The key is randomly generated and stored with restricted permissions (600)
+ * This is much more secure than deriving from hostname
+ */
+async function getEncryptionKey() {
+  const keyPath = getKeyPath();
+  const oauthDir = getOAuthDir();
+
+  try {
+    // Try to read existing key
+    const existingKey = await fs.readFile(keyPath);
+    if (existingKey.length === 32) {
+      return existingKey;
+    }
+  } catch {
+    // Key doesn't exist, will create one
+  }
+
+  // Ensure directory exists
+  await fs.mkdir(oauthDir, { recursive: true, mode: 0o700 });
+
+  // Generate new random key
+  const newKey = randomBytes(32);
+
+  // Write key with restricted permissions (readable only by owner)
+  await fs.writeFile(keyPath, newKey, { mode: 0o600 });
+
+  return newKey;
+}
+
+// Cache the key in memory after first read (avoids async in encrypt/decrypt)
+let cachedKey = null;
+
+async function ensureKeyLoaded() {
+  if (!cachedKey) {
+    cachedKey = await getEncryptionKey();
+  }
+  return cachedKey;
+}
+
+// Synchronous version for encrypt/decrypt (call ensureKeyLoaded first)
+function getKey() {
+  if (!cachedKey) {
+    throw new Error('Encryption key not loaded - call ensureKeyLoaded() first');
+  }
+  return cachedKey;
+}
+
 function encryptData(data) {
   const iv = randomBytes(16);
-  const key = getEncryptionKey();
+  const key = getKey(); // Uses cached key (must call ensureKeyLoaded first)
   const cipher = createCipheriv('aes-256-cbc', key, iv);
   let encrypted = cipher.update(data, 'utf-8', 'hex');
   encrypted += cipher.final('hex');
@@ -54,7 +102,7 @@ function decryptData(encryptedData) {
   }
   const iv = Buffer.from(parts[0], 'hex');
   const encrypted = parts[1];
-  const key = getEncryptionKey();
+  const key = getKey(); // Uses cached key (must call ensureKeyLoaded first)
   const decipher = createDecipheriv('aes-256-cbc', key, iv);
   let decrypted = decipher.update(encrypted, 'hex', 'utf-8');
   decrypted += decipher.final('utf-8');
@@ -63,6 +111,8 @@ function decryptData(encryptedData) {
 
 async function readOAuthConfig() {
   try {
+    // Ensure encryption key is loaded before decrypt
+    await ensureKeyLoaded();
     const configPath = getOAuthConfigPath();
     const content = await fs.readFile(configPath, 'utf-8');
     const data = JSON.parse(content);
@@ -79,12 +129,10 @@ async function readOAuthConfig() {
 }
 
 async function writeOAuthConfig(config) {
+  // Ensure encryption key is loaded before encrypt
+  await ensureKeyLoaded();
   const configDir = getOAuthDir();
-  try {
-    await fs.mkdir(configDir, { recursive: true });
-  } catch {
-    // Directory may already exist
-  }
+  await fs.mkdir(configDir, { recursive: true, mode: 0o700 });
   const encrypted = {
     accessToken: encryptData(config.accessToken),
     refreshToken: encryptData(config.refreshToken),
@@ -92,7 +140,8 @@ async function writeOAuthConfig(config) {
     expiresAt: config.expiresAt,
     mode: config.mode
   };
-  await fs.writeFile(getOAuthConfigPath(), JSON.stringify(encrypted, null, 2), 'utf-8');
+  // Write config with restricted permissions
+  await fs.writeFile(getOAuthConfigPath(), JSON.stringify(encrypted, null, 2), { mode: 0o600 });
 }
 
 // ==========================================
